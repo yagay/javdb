@@ -14,7 +14,7 @@
   const image = document.querySelector('img.video-cover, .video-cover img, .column-video-cover img, .cover img, meta[property="og:image"]');
   const imageCandidates = [image?.getAttribute('content'), image?.getAttribute('data-original'),
     image?.getAttribute('data-src'), image?.getAttribute('data-lazy-src'),
-    image?.getAttribute('srcset')?.split(',')[0]?.trim().split(/\\s+/)[0],
+    image?.getAttribute('srcset')?.split(',')[0]?.trim().split(/\s+/)[0],
     image?.getAttribute('src'), document.querySelector('meta[property="og:image"]')?.getAttribute('content')];
   let cover = '';
   for (const raw of imageCandidates) {
