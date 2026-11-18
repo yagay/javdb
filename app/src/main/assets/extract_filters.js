@@ -59,6 +59,12 @@
     const formUrl = allowed(form.getAttribute('action') || location.href);
     if (!formUrl) return;
     const defaults = new URL(formUrl);
+    const here = new URL(location.href);
+    if (defaults.pathname === here.pathname && defaults.hostname === here.hostname) {
+      here.searchParams.forEach((value, key) => {
+        if (!defaults.searchParams.has(key)) defaults.searchParams.append(key, value);
+      });
+    }
     const fields = Array.from(form.querySelectorAll('select[name], input[name]'));
     fields.forEach(field => {
       if (!field.name || field.disabled) return;
