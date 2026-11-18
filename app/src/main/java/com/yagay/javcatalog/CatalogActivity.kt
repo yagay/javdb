@@ -64,6 +64,8 @@ class CatalogActivity : ComponentActivity() {
         val store = Store(this)
         val cardsJs = assets.open("extract_cards.js").bufferedReader().use { it.readText() }
         val detailsJs = assets.open("extract_details.js").bufferedReader().use { it.readText() }
+        val extrasJs = assets.open("extract_detail_extras.js").bufferedReader().use { it.readText() }
+        val extras = mutableStateOf<DetailExtras?>(null)
         val magnetsJs = assets.open("extract_magnets.js").bufferedReader().use { it.readText() }
         val navJs = assets.open("extract_navigation.js").bufferedReader().use { it.readText() }
         val filtersJs = assets.open("extract_filters.js").bufferedReader().use { it.readText() }
@@ -127,6 +129,15 @@ class CatalogActivity : ComponentActivity() {
                     }
                 }
             }
+            browser.evaluateJavascript(extrasJs) { value ->
+                if (request == generation && browser.url == url) {
+                    decode(value)?.let { raw ->
+                        runCatching { DetailExtras.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
+                            extras.value = it
+                        }
+                    }
+                }
+            }
             browser.evaluateJavascript(magnetsJs) { value ->
                 if (request == generation && browser.url == url) {
                     decode(value)?.let { raw ->
@@ -158,6 +169,7 @@ class CatalogActivity : ComponentActivity() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     generation++
                     loading.value = true
+                    extras.value = null
                     details.value = null
                     magnetList.value = emptyList()
                 }
@@ -205,6 +217,7 @@ class CatalogActivity : ComponentActivity() {
                     if (!valid(card.url)) return
                     selected = card
                     details.value = null
+                    extras.value = null
                     magnetList.value = emptyList()
                     openSite(card.url)
                 }
@@ -261,41 +274,24 @@ class CatalogActivity : ComponentActivity() {
                         if (selected != null) {
                             val movie = selected!!
                             val info = details.value?.takeIf { it.url == movie.url }
-                            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                item {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                        CoverImage(
-                                            url = info?.cover?.ifBlank { movie.cover } ?: movie.cover,
-                                            referrer = movie.url, userAgent = browser.settings.userAgentString,
-                                            title = movie.title, modifier = Modifier.width(128.dp).height(190.dp),
-                                            onFailure = { imageFailures.value++ })
-                                        Column {
-                                            Text(info?.title?.ifBlank { movie.title } ?: movie.title,
-                                                style = MaterialTheme.typography.titleLarge)
-                                            Text(info?.code?.ifBlank { movie.code } ?: movie.code,
-                                                color = MaterialTheme.colorScheme.primary)
-                                            Text(info?.actors.orEmpty())
-                                            Text(info?.studio.orEmpty())
-                                            Text(info?.releaseDate.orEmpty())
-                                        }
-                                    }
-                                }
-                                item {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick = {
-                                            store.bookmark(movie.url, movie.title)
-                                            savedPages.value = store.pages("bookmarks")
-                                        }) { Text("收藏") }
-                                        Button(onClick = { showMagnets = true }) { Text("磁力") }
-                                        OutlinedButton(onClick = { openLegacy(movie.url) }) { Text("网页详情") }
-                                    }
-                                }
-                                item { Text(info?.description?.ifBlank { info.excerpt } ?: "影片资料正在加载，或可打开网页查看。") }
-                                if (info != null) {
-                                    item { Text(info.tags.joinToString(" · ")) }
-                                    item { Text("片商：" + info.studio + " · 导演：" + info.director + " · 时长：" + info.duration) }
-                                }
-                            }
+                            FullDetailScreen(
+                                movie = movie,
+                                info = info,
+                                extras = extras.value?.takeIf { it.url == movie.url },
+                                magnetCount = magnetList.value.size,
+                                bookmarked = savedPages.value.any { it.url == movie.url },
+                                userAgent = browser.settings.userAgentString,
+                                onBookmark = {
+                                    if (store.hasBookmark(movie.url)) store.removeBookmark(movie.url)
+                                    else store.bookmark(movie.url, info?.title ?: movie.title)
+                                    savedPages.value = store.pages("bookmarks")
+                                },
+                                onMagnets = { showMagnets = true },
+                                onWebsite = { url -> if (valid(url)) openLegacy(url) },
+                                onCategory = { url -> openCategory(url) },
+                                onRelated = { card -> openMovie(card) }
+                            )
+
                         } else when (tab) {
                             PageTab.HOME, PageTab.LIST -> {
                                 Column {
@@ -555,7 +551,7 @@ class CatalogActivity : ComponentActivity() {
 }
 
 @Composable
-private fun CoverImage(url: String, referrer: String, userAgent: String, title: String,
+internal fun CoverImage(url: String, referrer: String, userAgent: String, title: String,
                        modifier: Modifier = Modifier, onFailure: () -> Unit = {}) {
     val context = LocalContext.current
     var failed by remember(url) { mutableStateOf(false) }
