@@ -38,7 +38,11 @@ fun FullDetailScreen(
 ) {
     val context = LocalContext.current
     var fullImage by remember { mutableStateOf<String?>(null) }
-    val links = extras?.groups.orEmpty()
+    var expandedGroup by remember { mutableStateOf<DetailGroup?>(null) }
+    val links = extras?.groups.orEmpty().filter { group ->
+        group.title in setOf("演员", "导演", "制作商", "发行商", "系列", "标签")
+    }
+    val indexedGroups = links.associateBy { it.title }
     val recommendations = extras?.recommendations.orEmpty()
     val related = extras?.related.orEmpty()
     val imageLinks = extras?.previews.orEmpty()
@@ -77,59 +81,80 @@ fun FullDetailScreen(
             }
         }
         item {
-            Text("影片信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            val fields = listOf(
-                "发行日期" to info?.releaseDate.orEmpty(),
-                "时长" to info?.duration.orEmpty(),
-                "演员" to info?.actors.orEmpty(),
-                "片商/发行商" to info?.studio.orEmpty(),
-                "导演" to info?.director.orEmpty(),
-                "系列" to info?.series.orEmpty()
+            Text("影片资料", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            val details = listOf(
+                Triple("发行日期", info?.releaseDate.orEmpty(), ""),
+                Triple("时长", info?.duration.orEmpty(), ""),
+                Triple("演员", info?.actors.orEmpty(), "演员"),
+                Triple("导演", info?.director.orEmpty(), "导演"),
+                Triple("制作商", info?.studio.orEmpty(), "制作商"),
+                Triple("发行商", "", "发行商"),
+                Triple("系列", info?.series.orEmpty(), "系列")
             )
-            fields.filter { it.second.isNotBlank() }.forEach { (label, value) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(label, modifier = Modifier.width(94.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall)
-                    Text(value, modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            val description = info?.description?.ifBlank { info.excerpt }.orEmpty()
-            if (description.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(description, style = MaterialTheme.typography.bodyMedium)
-            } else if (info == null) {
-                Text(detailStatus.ifBlank { "正在读取桌面版网页影片资料..." },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onRetry) { Text("重新读取") }
-                    TextButton(onClick = { onWebsite(movie.url) }) { Text("检查网页") }
-                }
-            } else if (info.code.isBlank() && info.actors.isBlank() && info.studio.isBlank() &&
-                info.releaseDate.isBlank() && info.duration.isBlank()) {
-                Text(detailStatus, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = onRetry) { Text("刷新桌面资料") }
-            }
-        }
-        if (links.isNotEmpty()) {
-            items(links, key = { it.title + it.links.firstOrNull()?.url.orEmpty() }) { group ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(group.title, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        group.links.forEach { link ->
-                            AssistChip(onClick = { onCategory(link.url) }, label = { Text(link.title) })
-                        }
+            details.forEach { (label, rawValue, groupName) ->
+                val group = indexedGroups[groupName]
+                val names = group?.links?.map { it.title }?.distinct().orEmpty()
+                val visible = if (names.isNotEmpty()) names.take(4).joinToString("、") +
+                    if (names.size > 4) " 等" + names.size + "项" else "" else rawValue
+                if (visible.isNotBlank()) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.Top) {
+                        Text(label, modifier = Modifier.width(76.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall)
+                        Text(visible, modifier = Modifier.weight(1f).then(
+                            if (group != null) Modifier.clickable {
+                                if (group.links.size == 1) onCategory(group.links.first().url)
+                                else expandedGroup = group
+                            } else Modifier),
+                            color = if (group != null) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
-        } else if (info?.tags?.isNotEmpty() == true) {
-            item { Text("标签：" + info.tags.joinToString(" · ")) }
+            val description = info?.description.orEmpty().trim()
+            if (description.isNotBlank()) {
+                Spacer(Modifier.height(5.dp))
+                Text(description, style = MaterialTheme.typography.bodySmall)
+            }
+            if (info == null) {
+                Text(detailStatus.ifBlank { "正在读取影片资料..." },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onRetry) { Text("重新读取资料") }
+            } else if (info.code.isBlank() && info.actors.isBlank() &&
+                info.releaseDate.isBlank() && info.duration.isBlank()) {
+                Text(detailStatus, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onRetry) { Text("刷新资料") }
+            }
+        }
+        val tagLinks = indexedGroups["标签"]?.links.orEmpty()
+        val plainTags = if (tagLinks.isEmpty()) info?.tags.orEmpty().distinct().take(12) else emptyList()
+        if (tagLinks.isNotEmpty() || plainTags.isNotEmpty()) {
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("标签", style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold)
+                    if (tagLinks.size > 8) TextButton(onClick = {
+                        expandedGroup = indexedGroups["标签"]
+                    }) { Text("全部 " + tagLinks.size) }
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    tagLinks.take(8).forEach { tag ->
+                        AssistChip(onClick = { onCategory(tag.url) },
+                            label = { Text(tag.title, maxLines = 1) })
+                    }
+                    plainTags.forEach { name ->
+                        SuggestionChip(onClick = {}, enabled = false,
+                            label = { Text(name, maxLines = 1) })
+                    }
+                }
+            }
         }
         if (imageLinks.isNotEmpty()) {
             item {
@@ -218,6 +243,26 @@ fun FullDetailScreen(
             }
         }
     }
+    }
+    expandedGroup?.let { group ->
+        AlertDialog(
+            onDismissRequest = { expandedGroup = null },
+            title = { Text(group.title) },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    items(group.links.distinctBy { it.url }) { link ->
+                        ListItem(headlineContent = { Text(link.title) },
+                            modifier = Modifier.clickable {
+                                expandedGroup = null
+                                onCategory(link.url)
+                            })
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { expandedGroup = null }) { Text("关闭") }
+            }
+        )
     }
     fullImage?.let { url ->
         AlertDialog(
