@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.webkit.WebSettings
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -78,6 +79,7 @@ class CatalogActivity : ComponentActivity() {
         val magnetsJs = assets.open("extract_magnets.js").bufferedReader().use { it.readText() }
         val navJs = assets.open("extract_navigation.js").bufferedReader().use { it.readText() }
         val filtersJs = assets.open("extract_filters.js").bufferedReader().use { it.readText() }
+        val statusJs = assets.open("extract_status.js").bufferedReader().use { it.readText() }
         val directoryJs = assets.open("extract_directory.js").bufferedReader().use { it.readText() }
         val directory = mutableStateOf<SiteDirectory?>(null)
         val siteFilters = mutableStateOf<SiteFilters?>(null)
@@ -93,6 +95,7 @@ class CatalogActivity : ComponentActivity() {
         val scanInfo = mutableStateOf("")
         val imageFailures = mutableStateOf(0)
         val detailStatus = mutableStateOf("正在连接桌面网页...")
+        val pageStatus = mutableStateOf("正在加载桌面网站...")
         var generation = 0
         fun decode(value: String): String? = runCatching { JSONArray("[" + value + "]").getString(0) }.getOrNull()
         lateinit var browser: WebView
@@ -100,6 +103,27 @@ class CatalogActivity : ComponentActivity() {
             val url = browser.url ?: return
             if (!valid(url)) return
             val request = generation
+            browser.evaluateJavascript(statusJs) { value ->
+                if (request == generation && browser.url == url) {
+                    decode(value)?.let { raw ->
+                        runCatching { org.json.JSONObject(raw) }.getOrNull()?.let { status ->
+                            pageStatus.value = when {
+                                status.optBoolean("challenge") ->
+                                    "网站要求验证，请从右上角网页入口完成验证后返回"
+                                status.optInt("movieCards") > 0 ->
+                                    "桌面片单已加载 · " + status.optInt("movieCards") + " 项"
+                                status.optInt("infoFields") > 0 ->
+                                    "桌面详情已加载 · " + status.optInt("infoFields") + " 项资料"
+                                status.optInt("directory") > 0 ->
+                                    "桌面目录已加载 · " + status.optInt("directory") + " 项"
+                                status.optInt("bodyLength") < 150 ->
+                                    "桌面网页内容为空或仍在加载，可刷新重试"
+                                else -> "桌面网页已加载，未发现适配内容：" + status.optString("title")
+                            }
+                        }
+                    }
+                }
+            }
             store.history(url, browser.title ?: url)
             visits.value = store.pages("history")
             browser.evaluateJavascript(filtersJs) { value ->
@@ -189,9 +213,10 @@ class CatalogActivity : ComponentActivity() {
             // screen stays native and mobile sized. No separate scraping requests.
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
-            settings.userAgentString =
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            val systemUA = WebSettings.getDefaultUserAgent(this@CatalogActivity)
+            settings.userAgentString = systemUA
+                .replace(Regex("\\(Linux; Android[^)]*\\)"), "(Windows NT 10.0; Win64; x64)")
+                .replace(" Mobile Safari/", " Safari/")
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             webViewClient = object : WebViewClient() {
@@ -203,6 +228,11 @@ class CatalogActivity : ComponentActivity() {
                     generation++
                     loading.value = true
                     detailStatus.value = "正在读取桌面版 JavDB 网页..."
+                    pageStatus.value = "正在读取桌面网站..."
+                    movieList.value = null
+                    siteFilters.value = null
+                    navigation.value = null
+                    scanInfo.value = ""
                     extras.value = null
                     directory.value = null
                     details.value = null
@@ -213,17 +243,28 @@ class CatalogActivity : ComponentActivity() {
                     currentUrl.value = url ?: SITE
                     detailStatus.value = "网页加载完成，正在解析桌面详情..."
                     parsePage()
+                    val expectedUrl = url
+                    val expectedGeneration = generation
+                    // Desktop pages may hydrate lists, filters or details after onPageFinished.
+                    listOf(650L, 1750L, 3500L).forEach { delay ->
+                        view?.postDelayed({
+                            if (expectedGeneration == generation && view.url == expectedUrl &&
+                                valid(expectedUrl.orEmpty())) parsePage()
+                        }, delay)
+                    }
                 }
                 override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?,
                     errorResponse: WebResourceResponse?) {
                     if (request?.isForMainFrame == true) {
                         detailStatus.value = "网页 HTTP ${errorResponse?.statusCode ?: 0}，资料未加载；请在网页模式检查"
+                        pageStatus.value = detailStatus.value
                     }
                 }
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?,
                     error: WebResourceError?) {
                     if (request?.isForMainFrame == true) {
                         detailStatus.value = "网页加载失败：${error?.description ?: "网络错误"}"
+                        pageStatus.value = detailStatus.value
                     }
                 }
             }
@@ -481,7 +522,8 @@ class CatalogActivity : ComponentActivity() {
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                                    val cards = movieList.value?.cards.orEmpty().filter { valid(it.url) }
+                                    val cards = movieList.value?.takeIf { it.url == currentUrl.value }
+                                        ?.cards.orEmpty().filter { valid(it.url) }
                                     val entityEntries = directory.value?.takeIf { it.url == currentUrl.value }
                                         ?.items.orEmpty()
                                     if (cards.isEmpty() && entityEntries.isNotEmpty()) {
@@ -492,7 +534,7 @@ class CatalogActivity : ComponentActivity() {
                                             onOpen = { openCategory(it) },
                                             modifier = Modifier.weight(1f)
                                         )
-                                    } else if (cards.isEmpty()) Text("此栏目尚未读取到影片或人物列表。可打开原网页检查登录及站点验证。",
+                                    } else if (cards.isEmpty()) Text(pageStatus.value,
                                         modifier = Modifier.padding(16.dp))
                                     else LazyVerticalGrid(columns = GridCells.Fixed(2),
                                         contentPadding = PaddingValues(12.dp),
