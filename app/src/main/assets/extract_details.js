@@ -21,11 +21,11 @@
     if (!raw || /^(data:|blob:|javascript:)/i.test(raw)) continue;
     try { const u = new URL(raw, location.href); if (u.protocol === 'https:') { cover = u.href; break; } } catch (_) {}
   }
-  const panel = document.querySelector('.movie-panel-info, .video-meta-panel, .panel-block');
+  const panel = document.querySelector('.movie-panel-info, .video-meta-panel, .movie-panel, .panel-block');
   const excerpt = clean((panel || document.body).innerText).slice(0, 1400);
   const fields = {};
   if (panel) {
-    panel.querySelectorAll('.panel-block, .movie-panel-info > div, .video-meta-panel > div, p').forEach(node => {
+    panel.querySelectorAll('.panel-block, .movie-panel-info > div, .video-meta-panel > div, .movie-panel-info p, .video-meta-panel p, p').forEach(node => {
       const txt = clean(node.innerText || node.textContent);
       if (!txt || txt.length > 600) return;
       const colon = txt.search(/[:：]/);
