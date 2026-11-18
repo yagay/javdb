@@ -298,7 +298,7 @@ class CatalogActivity : ComponentActivity() {
                         route == "/" || route.isBlank() -> PageTab.HOME
                         else -> PageTab.LIST
                     }
-                    showDirectory = route == "/tags" || route == "/actors"
+                    showDirectory = route == "/tags"
                     openSite(url)
                 }
                 fun openMovie(card: MovieCard) {
