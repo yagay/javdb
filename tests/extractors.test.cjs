@@ -56,3 +56,39 @@ assert.equal(cards.items[0].url,'https://javdb.com/v/abcd12');
 assert.equal(cards.items[0].cover,'https://c0.jdbstatic.com/covers/test.jpg');
 assert.equal(cards.missingCovers,0);
 console.log('PASS: JavDB anchor cards, lazy covers and magnet links');
+
+
+// Desktop page uses <strong> field labels and sibling .value nodes, not colon text.
+const blocks = [
+  ['番號','ABC-123'],
+  ['日期','2026-01-02'],
+  ['片商','Example Studio'],
+  ['演員','Sample Actor'],
+  ['時長','120 分鐘'],
+].map(([label,value])=>({
+  querySelector: selector => {
+    if(selector==='strong, .label, .panel-label') return {textContent:label};
+    if(selector==='.value, .panel-value') return {textContent:value};
+    return null;
+  },
+  textContent:label + ' ' + value
+}));
+const desktopDoc = {
+ title: 'ABC-123 example',
+ querySelector: selector => {
+   if(selector==='.video-meta-panel h2.title') return {textContent:'ABC-123 example'};
+   if(selector==='.movie-panel-info') return {innerText:'ABC-123 example',textContent:'ABC-123 example'};
+   return null;
+ },
+ querySelectorAll: selector => {
+   if(selector.startsWith('.movie-panel-info .panel-block')) return blocks;
+   return [];
+ }
+};
+const desktop=run('extract_details.js',desktopDoc,'https://javdb.com/v/abc123?ref=page');
+assert.equal(desktop.code,'ABC-123');
+assert.equal(desktop.releaseDate,'2026-01-02');
+assert.equal(desktop.studio,'Example Studio');
+assert.equal(desktop.actors,'Sample Actor');
+assert.equal(desktop.duration,'120 分鐘');
+console.log('PASS: desktop full-page metadata labels and values');
