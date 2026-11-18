@@ -78,6 +78,8 @@ class CatalogActivity : ComponentActivity() {
         val magnetsJs = assets.open("extract_magnets.js").bufferedReader().use { it.readText() }
         val navJs = assets.open("extract_navigation.js").bufferedReader().use { it.readText() }
         val filtersJs = assets.open("extract_filters.js").bufferedReader().use { it.readText() }
+        val directoryJs = assets.open("extract_directory.js").bufferedReader().use { it.readText() }
+        val directory = mutableStateOf<SiteDirectory?>(null)
         val siteFilters = mutableStateOf<SiteFilters?>(null)
         val navigation = mutableStateOf<SiteNavigation?>(null)
         val movieList = mutableStateOf<MovieListing?>(null)
@@ -116,6 +118,15 @@ class CatalogActivity : ComponentActivity() {
                     decode(value)?.let { raw ->
                         runCatching { SiteNavigation.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
                             navigation.value = it.copy(links = it.links.filter { link -> valid(link.url) })
+                        }
+                    }
+                }
+            }
+            browser.evaluateJavascript(directoryJs) { value ->
+                if (request == generation && browser.url == url) {
+                    decode(value)?.let { raw ->
+                        runCatching { SiteDirectory.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
+                            directory.value = it.copy(items = it.items.filter { item -> valid(item.url) })
                         }
                     }
                 }
@@ -193,6 +204,7 @@ class CatalogActivity : ComponentActivity() {
                     loading.value = true
                     detailStatus.value = "正在读取桌面版 JavDB 网页..."
                     extras.value = null
+                    directory.value = null
                     details.value = null
                     magnetList.value = emptyList()
                 }
@@ -463,7 +475,17 @@ class CatalogActivity : ComponentActivity() {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                                     val cards = movieList.value?.cards.orEmpty().filter { valid(it.url) }
-                                    if (cards.isEmpty()) Text("网站加载后会显示影片。需要登录或验证时请进入网页浏览。",
+                                    val entityEntries = directory.value?.takeIf { it.url == currentUrl.value }
+                                        ?.items.orEmpty()
+                                    if (cards.isEmpty() && entityEntries.isNotEmpty()) {
+                                        NativeDirectoryGrid(
+                                            entries = entityEntries,
+                                            currentUrl = currentUrl.value,
+                                            userAgent = browser.settings.userAgentString,
+                                            onOpen = { openCategory(it) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    } else if (cards.isEmpty()) Text("此栏目尚未读取到影片或人物列表。可打开原网页检查登录及站点验证。",
                                         modifier = Modifier.padding(16.dp))
                                     else LazyVerticalGrid(columns = GridCells.Fixed(2),
                                         contentPadding = PaddingValues(12.dp),
@@ -489,6 +511,7 @@ class CatalogActivity : ComponentActivity() {
                                 Button(onClick = {
                                     if (search.isNotBlank()) {
                                         openSite(SITE.trimEnd('/') + "/search?q=" + Uri.encode(search.trim()))
+                                        showDirectory = false
                                         tab = PageTab.LIST
                                     }
                                 }, modifier = Modifier.fillMaxWidth()) { Text("搜索") }
