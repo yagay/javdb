@@ -548,12 +548,22 @@ class CatalogActivity : ComponentActivity() {
                                             AssistChip(onClick = { showFilters = true },
                                                 label = { Text("筛选 / 排序") },
                                                 leadingIcon = { Icon(Icons.Default.Tune, null, Modifier.size(16.dp)) })
-                                            siteFilters.value?.groups.orEmpty().flatMap { it.links }
-                                                .distinctBy { it.url }.take(10).forEach { item ->
-                                                    FilterChip(selected = item.selected,
+                                            // Show only active criteria here. Showing the first
+                                            // ten arbitrary tags confuses categories with filters.
+                                            siteFilters.value?.groups.orEmpty()
+                                                .flatMap { it.links }
+                                                .filter { it.selected }
+                                                .distinctBy { it.url }
+                                                .take(8).forEach { item ->
+                                                    FilterChip(selected = true,
                                                         onClick = { openCategory(item.url) },
                                                         label = { Text(item.title, maxLines = 1) })
                                                 }
+                                            if (Uri.parse(currentUrl.value).path == "/tags" &&
+                                                !Uri.parse(currentUrl.value).query.isNullOrEmpty()) {
+                                                AssistChip(onClick = { openCategory(SITE + "tags") },
+                                                    label = { Text("清除条件") })
+                                            }
                                         }
                                     }
                                     if (scanInfo.value.isNotBlank() && imageFailures.value > 0) {
@@ -664,7 +674,7 @@ class CatalogActivity : ComponentActivity() {
                         val groups = siteFilters.value?.groups.orEmpty()
                         Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
                             Text("网站分类与筛选", style = MaterialTheme.typography.titleLarge)
-                            Text("从当前网页读取真实可用的分类、演员、标签、排序等选项。",
+                            Text("点击标签应用或取消条件；已选标签会显示高亮。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(12.dp))
