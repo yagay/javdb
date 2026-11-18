@@ -31,7 +31,10 @@
     '.filter-panel', '.filter-group', '.filter-section', '.filters', '.filter',
     '.tag-list', '.tags', '.category-list', '.categories',
     '.tabs', '.navbar-menu', '.pagination', '.sort-options', '.sort',
-    '.actors', '.actor-list', '.makers', '.series', '.ranking-tabs'
+    '.actors', '.actor-list', '.makers', '.series', '.ranking-tabs',
+    '.movie-list-filter', '.movie-filter', '.filter-buttons', '.sort-list',
+    '.movie-list-header', '.filter-box', '.filter-options', '.filter-item',
+    '.buttons.has-addons', '.dropdown-menu', '.dropdown-content', '.tabs.is-toggle'
   ].join(',');
   document.querySelectorAll(selectors).forEach(el => {
     if (el.closest('.movie-list .item, .movie-box, .video-item, footer')) return;
