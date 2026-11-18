@@ -50,7 +50,7 @@ private fun valid(url: String): Boolean = try {
 } catch (_: Exception) { false }
 
 private enum class PageTab(val title: String) {
-    HOME("发现"), LIST("片单"), SEARCH("搜索"), SAVED("收藏"), MINE("我的")
+    HOME("发现"), LIST("分类"), SEARCH("搜索"), SAVED("收藏"), MINE("我的")
 }
 
 class CatalogActivity : ComponentActivity() {
@@ -62,6 +62,8 @@ class CatalogActivity : ComponentActivity() {
         val detailsJs = assets.open("extract_details.js").bufferedReader().use { it.readText() }
         val magnetsJs = assets.open("extract_magnets.js").bufferedReader().use { it.readText() }
         val navJs = assets.open("extract_navigation.js").bufferedReader().use { it.readText() }
+        val filtersJs = assets.open("extract_filters.js").bufferedReader().use { it.readText() }
+        val siteFilters = mutableStateOf<SiteFilters?>(null)
         val navigation = mutableStateOf<SiteNavigation?>(null)
         val movieList = mutableStateOf<MovieListing?>(null)
         val details = mutableStateOf<MovieDetails?>(null)
@@ -80,6 +82,17 @@ class CatalogActivity : ComponentActivity() {
             val request = generation
             store.history(url, browser.title ?: url)
             visits.value = store.pages("history")
+            browser.evaluateJavascript(filtersJs) { value ->
+                if (request == generation && browser.url == url) {
+                    decode(value)?.let { raw ->
+                        runCatching { SiteFilters.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
+                            siteFilters.value = it.copy(groups = it.groups.map { group ->
+                                group.copy(links = group.links.filter { link -> valid(link.url) })
+                            }.filter { group -> group.links.isNotEmpty() })
+                        }
+                    }
+                }
+            }
             browser.evaluateJavascript(navJs) { value ->
                 if (request == generation && browser.url == url) {
                     decode(value)?.let { raw ->
@@ -163,6 +176,7 @@ class CatalogActivity : ComponentActivity() {
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
                 var showMagnets by remember { mutableStateOf(false) }
+                var showFilters by remember { mutableStateOf(false) }
                 var filterText by remember { mutableStateOf("") }
                 var subtitlesOnly by remember { mutableStateOf(false) }
                 var minSize by remember { mutableStateOf("") }
@@ -172,6 +186,13 @@ class CatalogActivity : ComponentActivity() {
                 fun copyItems(items: List<Magnet>) {
                     if (items.isNotEmpty()) getSystemService(ClipboardManager::class.java)
                         .setPrimaryClip(ClipData.newPlainText("Magnets", items.joinToString("\n") { it.uri }))
+                }
+                fun openCategory(url: String) {
+                    if (!valid(url)) return
+                    selected = null
+                    showFilters = false
+                    tab = PageTab.LIST
+                    openSite(url)
                 }
                 fun openMovie(card: MovieCard) {
                     if (!valid(card.url)) return
@@ -193,6 +214,9 @@ class CatalogActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
+                                if (selected == null) IconButton(onClick = { showFilters = true }) {
+                                    Icon(Icons.Default.Tune, contentDescription = "分类筛选")
+                                }
                                 IconButton(onClick = { openLegacy(currentUrl.value) }) {
                                     Icon(Icons.Default.OpenInBrowser, contentDescription = "网页完整功能")
                                 }
@@ -282,8 +306,31 @@ class CatalogActivity : ComponentActivity() {
                                                 .padding(horizontal = 16.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             navigation.value?.links?.take(16)?.forEach { link ->
-                                                AssistChip(onClick = { openSite(link.url); tab = PageTab.LIST },
+                                                AssistChip(onClick = { openCategory(link.url) },
                                                     label = { Text(link.title, maxLines = 1) })
+                                            }
+                                        }
+                                    }
+                                    if (tab == PageTab.LIST) {
+                                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Button(onClick = { showFilters = true }) {
+                                                Icon(Icons.Default.Tune, contentDescription = null)
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("网页分类与筛选")
+                                            }
+                                            OutlinedButton(onClick = { openLegacy(currentUrl.value) }) { Text("原网页") }
+                                        }
+                                        val groups = siteFilters.value?.groups.orEmpty()
+                                        val quick = groups.flatMap { it.links }.distinctBy { it.url }.take(12)
+                                        if (quick.isNotEmpty()) Row(
+                                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            quick.forEach { option ->
+                                                FilterChip(selected = option.selected,
+                                                    onClick = { openCategory(option.url) },
+                                                    label = { Text(option.title) })
                                             }
                                         }
                                     }
@@ -354,6 +401,43 @@ class CatalogActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                if (showFilters) {
+                    ModalBottomSheet(onDismissRequest = { showFilters = false }) {
+                        val groups = siteFilters.value?.groups.orEmpty()
+                        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
+                            Text("网站分类与筛选", style = MaterialTheme.typography.titleLarge)
+                            Text("从当前网页读取真实可用的分类、演员、标签、排序等选项。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(12.dp))
+                            if (groups.isEmpty()) {
+                                Text("当前网页没有检测到分类控件。可打开网站分类页后返回，或使用网页模式。",
+                                    modifier = Modifier.padding(vertical = 12.dp))
+                            }
+                            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                items(groups, key = { it.title + it.links.firstOrNull()?.url.orEmpty() }) { group ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(group.title, style = MaterialTheme.typography.titleMedium)
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            group.links.forEach { option ->
+                                                FilterChip(
+                                                    selected = option.selected,
+                                                    onClick = { openCategory(option.url) },
+                                                    label = { Text(option.title, maxLines = 1) })
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Button(onClick = {
+                                showFilters = false
+                                openLegacy(currentUrl.value)
+                            }, modifier = Modifier.fillMaxWidth()) { Text("在网站查看全部筛选项") }
+                            Spacer(Modifier.height(12.dp))
                         }
                     }
                 }
