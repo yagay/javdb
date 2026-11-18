@@ -10,11 +10,11 @@ data class SiteFilters(val url: String, val groups: List<FilterGroup>) {
             val obj = JSONObject(raw)
             val groups = obj.optJSONArray("groups")
             return SiteFilters(obj.optString("url"), buildList {
-                if (groups != null) for (i in 0 until minOf(groups.length(), 20)) {
+                if (groups != null) for (i in 0 until minOf(groups.length(), 30)) {
                     val group = groups.optJSONObject(i) ?: continue
                     val links = group.optJSONArray("links") ?: continue
                     val options = buildList {
-                        for (j in 0 until minOf(links.length(), 50)) {
+                        for (j in 0 until minOf(links.length(), 80)) {
                             val item = links.optJSONObject(j) ?: continue
                             val title = item.optString("title").take(50)
                             val url = item.optString("url").take(2048)
