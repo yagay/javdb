@@ -52,24 +52,28 @@
       if (key && rest && !fields[key]) fields[key] = rest.slice(0, 320);
     }
   });
-  const field = (...keywords) => {
+  const field = (...aliases) => {
+    const wanted = new Set(aliases.map(alias => alias.toLowerCase().replace(/[\s：:]+/g, '')));
     for (const [key, value] of Object.entries(fields)) {
-      const normalized = key.toLowerCase().replace(/\s+/g, '');
-      if (keywords.some(k => normalized.includes(k))) return value;
+      const normalized = key.toLowerCase().replace(/[\s：:]+/g, '');
+      if (wanted.has(normalized)) return value;
     }
     return '';
   };
   const title = firstText('.video-meta-panel h2.title', 'h2.title', '.video-detail h2', 'h1') ||
     metadata('meta[property="og:title"]') || clean(document.title);
-  const description = metadata('meta[name="description"]') || metadata('meta[property="og:description"]');
-  const excerpt = clean(get('.movie-panel-info')?.innerText || get('.movie-panel-info')?.textContent ||
-    get('.video-meta-panel')?.innerText || '').slice(0, 1400);
+  // Site-wide SEO meta descriptions are not movie synopses; never display them.
+  const description = firstText('.movie-synopsis', '.video-description .content',
+    '.movie-description .content', '[itemprop="description"]', '.video-introduction');
+  const excerpt = '';
+  const metadataText = clean(get('.movie-panel-info')?.textContent ||
+    get('.video-meta-panel')?.textContent || '');
   const codeFromClipboard = get('.movie-panel-info [data-clipboard-text], .video-meta-panel [data-clipboard-text]')
     ?.getAttribute('data-clipboard-text');
-  const codeMatch = (title + ' ' + excerpt).match(/\b[A-Z]{2,8}[- ]?\d{2,7}\b/i);
-  const code = field('番號', '番号', '識別碼', '识别码', 'id') ||
+  const codeMatch = (title + ' ' + metadataText).match(/\b[A-Z]{2,8}[- ]?\d{2,7}\b/i);
+  const code = field('番號', '番号', '識別碼', '识别码', 'ID') ||
     clean(codeFromClipboard) || (codeMatch ? codeMatch[0].toUpperCase() : '');
-  const tags = all('.movie-panel-info .tags a, .video-meta-panel .tags a, .tags a[href], .movie-panel-info a[href*="/tags/"]')
+  const tags = all('.movie-panel-info a[href*="/tags/"], .video-meta-panel a[href*="/tags/"]')
     .map(node => clean(node.textContent)).filter(Boolean).slice(0, 40);
   return JSON.stringify({
     url: location.href,
@@ -78,8 +82,8 @@
     description: description.slice(0, 1200),
     cover, excerpt,
     releaseDate: field('日期', '發行日期', '发行日期', 'date'),
-    studio: field('片商', '發行', '发行商', '製作', '制作', 'studio', 'publisher'),
-    actors: field('演員', '演员', 'actor', 'star'),
+    studio: field('片商', '發行商', '发行商', '製作商', '制作商', 'studio', 'publisher'),
+    actors: field('演員', '演员', 'actor', 'actors', 'star'),
     duration: field('時長', '时长', '長度', '长度', 'duration'),
     director: field('導演', '导演', 'director'),
     series: field('系列', 'series'),
