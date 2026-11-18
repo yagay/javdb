@@ -9,6 +9,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebResourceError
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -53,6 +55,13 @@ private fun valid(url: String): Boolean = try {
     uri.scheme == "https" && (uri.host == "javdb.com" || uri.host?.endsWith(".javdb.com") == true)
 } catch (_: Exception) { false }
 
+private fun sameMoviePage(first: String, second: String): Boolean {
+    if (!valid(first) || !valid(second)) return false
+    val path1 = Uri.parse(first).path?.trimEnd('/') ?: return false
+    val path2 = Uri.parse(second).path?.trimEnd('/') ?: return false
+    return path1 == path2 && (path1.startsWith("/v/") || path1.startsWith("/video/") || path1.startsWith("/videos/"))
+}
+
 private enum class PageTab(val title: String) {
     HOME("发现"), LIST("分类"), SEARCH("搜索"), SAVED("收藏"), MINE("我的")
 }
@@ -81,6 +90,7 @@ class CatalogActivity : ComponentActivity() {
         val currentUrl = mutableStateOf(SITE)
         val scanInfo = mutableStateOf("")
         val imageFailures = mutableStateOf(0)
+        val detailStatus = mutableStateOf("正在连接桌面网页...")
         var generation = 0
         fun decode(value: String): String? = runCatching { JSONArray("[" + value + "]").getString(0) }.getOrNull()
         lateinit var browser: WebView
@@ -121,12 +131,17 @@ class CatalogActivity : ComponentActivity() {
                 }
             }
             browser.evaluateJavascript(detailsJs) { value ->
-                if (request == generation && browser.url == url) {
-                    decode(value)?.let { raw ->
-                        runCatching { MovieDetails.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
-                            details.value = it
-                        }
-                    }
+                if (request != generation || browser.url != url) return@evaluateJavascript
+                val raw = decode(value)
+                val parsed = raw?.let { runCatching { MovieDetails.parse(it) }.getOrNull() }
+                if (parsed != null && sameMoviePage(parsed.url, url)) {
+                    details.value = parsed
+                    detailStatus.value = if (parsed.code.isNotBlank() || parsed.actors.isNotBlank() ||
+                        parsed.studio.isNotBlank() || parsed.releaseDate.isNotBlank() ||
+                        parsed.duration.isNotBlank()) "桌面版影片资料已读取"
+                    else "桌面网页已加载，但没有识别到影片字段；可重试或打开网页检查验证状态"
+                } else {
+                    detailStatus.value = "无法从当前桌面网页提取影片信息；请检查网页登录或重试"
                 }
             }
             browser.evaluateJavascript(extrasJs) { value ->
@@ -159,6 +174,13 @@ class CatalogActivity : ComponentActivity() {
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             settings.mediaPlaybackRequiresUserGesture = true
+            // The hidden data WebView reads the full desktop DOM, while the user-facing
+            // screen stays native and mobile sized. No separate scraping requests.
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.userAgentString =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             webViewClient = object : WebViewClient() {
@@ -169,6 +191,7 @@ class CatalogActivity : ComponentActivity() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     generation++
                     loading.value = true
+                    detailStatus.value = "正在读取桌面版 JavDB 网页..."
                     extras.value = null
                     details.value = null
                     magnetList.value = emptyList()
@@ -176,7 +199,20 @@ class CatalogActivity : ComponentActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     loading.value = false
                     currentUrl.value = url ?: SITE
+                    detailStatus.value = "网页加载完成，正在解析桌面详情..."
                     parsePage()
+                }
+                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?,
+                    errorResponse: WebResourceResponse?) {
+                    if (request?.isForMainFrame == true) {
+                        detailStatus.value = "网页 HTTP ${errorResponse?.statusCode ?: 0}，资料未加载；请在网页模式检查"
+                    }
+                }
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?,
+                    error: WebResourceError?) {
+                    if (request?.isForMainFrame == true) {
+                        detailStatus.value = "网页加载失败：${error?.description ?: "网络错误"}"
+                    }
                 }
             }
             loadUrl(SITE)
@@ -306,11 +342,13 @@ class CatalogActivity : ComponentActivity() {
                             }
                         } else if (selected != null) {
                             val movie = selected!!
-                            val info = details.value?.takeIf { it.url == movie.url }
+                            val info = details.value?.takeIf { sameMoviePage(it.url, movie.url) }
                             FullDetailScreen(
                                 movie = movie,
                                 info = info,
-                                extras = extras.value?.takeIf { it.url == movie.url },
+                                extras = extras.value?.takeIf { sameMoviePage(it.url, movie.url) },
+                                detailStatus = detailStatus.value,
+                                onRetry = { browser.reload() },
                                 magnetCount = magnetList.value.size,
                                 bookmarked = savedPages.value.any { it.url == movie.url },
                                 userAgent = browser.settings.userAgentString,
