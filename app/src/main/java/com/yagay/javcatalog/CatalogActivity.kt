@@ -277,7 +277,14 @@ class CatalogActivity : ComponentActivity() {
                 BackHandler(selected != null || tab != PageTab.HOME) {
                     if (selected != null) {
                         selected = null
-                    } else tab = PageTab.HOME
+                        if (browser.canGoBack()) browser.goBack()
+                    } else if (tab == PageTab.LIST && !showDirectory) {
+                        showDirectory = true
+                        openSite(SITE + "tags")
+                    } else {
+                        tab = PageTab.HOME
+                        openSite(SITE)
+                    }
                 }
                 Scaffold(
                     topBar = {
@@ -412,14 +419,14 @@ class CatalogActivity : ComponentActivity() {
                                         Text("发现影片", style = MaterialTheme.typography.headlineMedium,
                                             modifier = Modifier.padding(16.dp))
                                         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(onClick = { openSite(SITE) }) { Text("首页") }
-                                            OutlinedButton(onClick = { browser.reload() }) { Text("刷新") }
-                                            OutlinedButton(onClick = { openLegacy(currentUrl.value) }) { Text("网页浏览") }
+                                            TextButton(onClick = { openSite(SITE) }) { Text("最新") }
+                                            TextButton(onClick = { browser.reload() }) { Text("刷新") }
+                                            TextButton(onClick = { showSiteMenu = true }) { Text("全部栏目") }
                                         }
                                         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             AssistChip(onClick = { openCategory(SITE + "tags") },
-                                                label = { Text("分类标签") })
+                                                label = { Text("分类") })
                                             AssistChip(onClick = { openCategory(SITE + "actors") },
                                                 label = { Text("演员") })
                                             AssistChip(onClick = { openCategory(SITE + "rankings") },
