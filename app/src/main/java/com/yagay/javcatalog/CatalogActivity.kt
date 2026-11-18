@@ -293,8 +293,12 @@ class CatalogActivity : ComponentActivity() {
                     selected = null
                     showFilters = false
                     val route = Uri.parse(url).path.orEmpty()
-                    tab = if (route.startsWith("/rankings")) PageTab.RANK else PageTab.LIST
-                    showDirectory = false
+                    tab = when {
+                        route.startsWith("/rankings") -> PageTab.RANK
+                        route == "/" || route.isBlank() -> PageTab.HOME
+                        else -> PageTab.LIST
+                    }
+                    showDirectory = route == "/tags" || route == "/actors"
                     openSite(url)
                 }
                 fun openMovie(card: MovieCard) {
@@ -333,7 +337,7 @@ class CatalogActivity : ComponentActivity() {
                                     Icon(if (webDetail) Icons.Default.ViewAgenda else Icons.Default.Language,
                                         contentDescription = if (webDetail) "使用原生手机布局" else "查看网站原页")
                                 }
-                                if (selected == null) IconButton(onClick = { showFilters = true }) {
+                                if (selected == null && (tab == PageTab.LIST || tab == PageTab.RANK || tab == PageTab.HOME)) IconButton(onClick = { showFilters = true }) {
                                     Icon(Icons.Default.Tune, contentDescription = "分类筛选")
                                 }
                                 IconButton(onClick = { openLegacy(currentUrl.value) }) {
