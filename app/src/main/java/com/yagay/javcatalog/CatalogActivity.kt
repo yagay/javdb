@@ -347,8 +347,17 @@ class CatalogActivity : ComponentActivity() {
                         selected = null
                         if (browser.canGoBack()) browser.goBack()
                     } else if (tab == PageTab.LIST && !showDirectory) {
-                        showDirectory = true
-                        openSite(SITE + "tags")
+                        // Only tag-result pages return to the tag chooser.
+                        // Actor/series/search results should follow WebView history.
+                        if (Uri.parse(currentUrl.value).path?.startsWith("/tags") == true) {
+                            showDirectory = true
+                            openSite(SITE + "tags")
+                        } else if (browser.canGoBack()) {
+                            browser.goBack()
+                        } else {
+                            tab = PageTab.HOME
+                            openSite(SITE)
+                        }
                     } else {
                         tab = PageTab.HOME
                         openSite(SITE)
