@@ -92,3 +92,27 @@ assert.equal(desktop.studio,'Example Studio');
 assert.equal(desktop.actors,'Sample Actor');
 assert.equal(desktop.duration,'120 分鐘');
 console.log('PASS: desktop full-page metadata labels and values');
+
+
+const actorPhoto = {getAttribute: attr => attr === 'data-original' ? '//c0.jdbstatic.com/actors/avatar.jpg' : null};
+const actorCard = {
+  getAttribute: attr => attr === 'href' ? '/actors/xyz' : null,
+  closest: selector => {
+    if (selector.startsWith('header')) return null;
+    if (selector.startsWith('.box')) return actorCard;
+    return null;
+  },
+  querySelector: selector => {
+    if (selector === 'img') return actorPhoto;
+    if (selector === '.name, .title, .actor-name, .label') return {textContent:'Actor Example'};
+    return null;
+  },
+  textContent:'Actor Example'
+};
+const directory=run('extract_directory.js',{
+  querySelectorAll:()=>[actorCard],
+},'https://javdb.com/actors');
+assert.equal(directory.items.length,1);
+assert.equal(directory.items[0].url,'https://javdb.com/actors/xyz');
+assert.equal(directory.items[0].cover,'https://c0.jdbstatic.com/actors/avatar.jpg');
+console.log('PASS: native entity directory source extraction');
