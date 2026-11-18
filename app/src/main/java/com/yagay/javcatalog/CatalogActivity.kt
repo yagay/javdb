@@ -312,6 +312,7 @@ class CatalogActivity : ComponentActivity() {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) dark else light) {
                 var tab by remember { mutableStateOf(PageTab.HOME) }
                 var showSiteMenu by remember { mutableStateOf(false) }
+                var showMoreActions by remember { mutableStateOf(false) }
                 var showDirectory by remember { mutableStateOf(true) }
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
@@ -368,28 +369,43 @@ class CatalogActivity : ComponentActivity() {
                             },
                             actions = {
                                 if (!loginMode.value) {
-                                IconButton(onClick = { openLogin() }) {
-                                    Icon(Icons.Default.AccountCircle, contentDescription = "登录 JavDB")
-                                }
-                                if (selected != null) IconButton(onClick = { webDetail = !webDetail }) {
-                                    Icon(if (webDetail) Icons.Default.ViewAgenda else Icons.Default.Language,
-                                        contentDescription = if (webDetail) "使用原生手机布局" else "查看网站原页")
-                                }
-                                if (selected == null && (tab == PageTab.LIST || tab == PageTab.RANK || tab == PageTab.HOME)) IconButton(onClick = { showFilters = true }) {
-                                    Icon(Icons.Default.Tune, contentDescription = "分类筛选")
-                                }
-                                IconButton(onClick = { openLegacy(currentUrl.value) }) {
-                                    Icon(Icons.Default.OpenInBrowser, contentDescription = "网页完整功能")
-                                }
-                                IconButton(onClick = { if (selected == null) tab = PageTab.SEARCH else showMagnets = true }) {
-                                    Icon(if (selected == null) Icons.Default.Search else Icons.Default.Link, contentDescription = "搜索或磁力")
-                                }
+                                    if (selected != null) IconButton(onClick = { webDetail = !webDetail }) {
+                                        Icon(if (webDetail) Icons.Default.ViewAgenda else Icons.Default.Language,
+                                            contentDescription = "切换网页显示")
+                                    }
+                                    if (selected == null && (tab == PageTab.LIST || tab == PageTab.RANK || tab == PageTab.HOME)) {
+                                        IconButton(onClick = { showFilters = true }) {
+                                            Icon(Icons.Default.Tune, contentDescription = "分类筛选")
+                                        }
+                                    }
+                                    if (selected == null) IconButton(onClick = { tab = PageTab.SEARCH }) {
+                                        Icon(Icons.Default.Search, contentDescription = "搜索")
+                                    }
+                                    Box {
+                                        IconButton(onClick = { showMoreActions = true }) {
+                                            Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+                                        }
+                                        DropdownMenu(expanded = showMoreActions, onDismissRequest = { showMoreActions = false }) {
+                                            DropdownMenuItem(text = { Text("JavDB 登录") },
+                                                onClick = { showMoreActions = false; openLogin() },
+                                                leadingIcon = { Icon(Icons.Default.AccountCircle, null) })
+                                            DropdownMenuItem(text = { Text("浏览完整网页") },
+                                                onClick = { showMoreActions = false; openLegacy(currentUrl.value) },
+                                                leadingIcon = { Icon(Icons.Default.OpenInBrowser, null) })
+                                            DropdownMenuItem(text = { Text("刷新数据") },
+                                                onClick = { showMoreActions = false; browser.reload() },
+                                                leadingIcon = { Icon(Icons.Default.Refresh, null) })
+                                            if (selected != null) DropdownMenuItem(text = { Text("磁力资源") },
+                                                onClick = { showMoreActions = false; showMagnets = true },
+                                                leadingIcon = { Icon(Icons.Default.Link, null) })
+                                        }
+                                    }
                                 }
                             }
                         )
                     },
                     bottomBar = {
-                        if (!loginMode.value && selected == null) NavigationBar {
+                        if (!loginMode.value && selected == null) NavigationBar(modifier = Modifier.height(64.dp)) {
                             PageTab.entries.filter { it != PageTab.SEARCH }.forEach { item ->
                                 NavigationBarItem(
                                     selected = tab == item,
@@ -504,29 +520,21 @@ class CatalogActivity : ComponentActivity() {
                                         }
                                     } else {
                                     if (tab == PageTab.HOME) {
-                                        Text("发现影片", style = MaterialTheme.typography.headlineMedium,
-                                            modifier = Modifier.padding(16.dp))
-                                        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            TextButton(onClick = { openSite(SITE) }) { Text("最新") }
-                                            TextButton(onClick = { browser.reload() }) { Text("刷新") }
-                                            TextButton(onClick = { showSiteMenu = true }) { Text("全部栏目") }
-                                        }
-                                        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            AssistChip(onClick = { openCategory(SITE + "tags") },
-                                                label = { Text("分类") })
-                                            AssistChip(onClick = { openCategory(SITE + "actors") },
-                                                label = { Text("演员") })
-                                            AssistChip(onClick = { openCategory(SITE + "rankings") },
-                                                label = { Text("排行榜") })
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            AssistChip(onClick = { openSite(SITE) }, label = { Text("最新") })
+                                            AssistChip(onClick = { openCategory(SITE + "tags") }, label = { Text("分类") })
+                                            AssistChip(onClick = { openCategory(SITE + "actors") }, label = { Text("演员") })
+                                            AssistChip(onClick = { openCategory(SITE + "rankings") }, label = { Text("排行") })
+                                            AssistChip(onClick = { showSiteMenu = true }, label = { Text("更多") })
                                         }
                                     }
                                     if (tab == PageTab.HOME && navigation.value?.links?.isNotEmpty() == true) {
-                                        Text("网站分类", style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+
                                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                                .padding(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                .padding(horizontal = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             navigation.value?.links?.take(16)?.forEach { link ->
                                                 AssistChip(onClick = { openCategory(link.url) },
                                                     label = { Text(link.title, maxLines = 1) })
@@ -534,41 +542,25 @@ class CatalogActivity : ComponentActivity() {
                                         }
                                     }
                                     if (tab == PageTab.LIST || tab == PageTab.RANK) {
-                                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(onClick = { showFilters = true }) {
-                                                Icon(Icons.Default.Tune, contentDescription = null)
-                                                Spacer(Modifier.width(6.dp))
-                                                Text("网页分类与筛选")
-                                            }
-                                            OutlinedButton(onClick = { openLegacy(currentUrl.value) }) { Text("原网页") }
-                                        }
-                                        val groups = siteFilters.value?.groups.orEmpty()
-                                        if (tab == PageTab.RANK) {
-                                            Text("榜单时间、分类和排序按当前网页筛选项显示",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                                        }
-                                        val quick = groups.flatMap { it.links }.distinctBy { it.url }.take(16)
-                                        if (quick.isNotEmpty()) Row(
-                                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            quick.forEach { option ->
-                                                FilterChip(selected = option.selected,
-                                                    onClick = { openCategory(option.url) },
-                                                    label = { Text(option.title) })
-                                            }
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            AssistChip(onClick = { showFilters = true },
+                                                label = { Text("筛选 / 排序") },
+                                                leadingIcon = { Icon(Icons.Default.Tune, null, Modifier.size(16.dp)) })
+                                            siteFilters.value?.groups.orEmpty().flatMap { it.links }
+                                                .distinctBy { it.url }.take(10).forEach { item ->
+                                                    FilterChip(selected = item.selected,
+                                                        onClick = { openCategory(item.url) },
+                                                        label = { Text(item.title, maxLines = 1) })
+                                                }
                                         }
                                     }
-                                    Text("当前片单 · " + (movieList.value?.cards?.size ?: 0).toString() + " 部",
-                                        style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-                                    if (scanInfo.value.isNotBlank()) Text(
-                                        scanInfo.value + if (imageFailures.value > 0) " · 图片加载失败 ${imageFailures.value} 次" else "",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                                    if (scanInfo.value.isNotBlank() && imageFailures.value > 0) {
+                                        Text(scanInfo.value, style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                                    }
                                     val cards = movieList.value?.takeIf { it.url == currentUrl.value }
                                         ?.cards.orEmpty().filter { valid(it.url) }
                                     val entityEntries = directory.value?.takeIf { it.url == currentUrl.value }
@@ -822,11 +814,11 @@ private fun PosterCard(movie: MovieCard, userAgent: String, onImageFailure: () -
         CoverImage(url = movie.cover, referrer = movie.url, userAgent = userAgent,
             title = movie.title, modifier = Modifier.fillMaxWidth().aspectRatio(0.70f),
             onFailure = onImageFailure)
-        Column(Modifier.padding(horizontal = 5.dp, vertical = 6.dp)) {
+        Column(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
             Text(movie.code.ifBlank { "影片" }, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.labelSmall, maxLines = 1)
             Text(movie.title, style = MaterialTheme.typography.labelSmall,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
