@@ -15,7 +15,7 @@
   };
   const firstSrcset = raw => (raw || '').split(',').map(s => s.trim().split(/\s+/)[0]).find(Boolean) || '';
   const pickImage = card => {
-    const img = card.querySelector('.cover img, .cover-image img, img');
+    const img = card.querySelector('.cover img, .cover-image img, .cover-image, img');
     if (!img) return '';
     const candidates = [
       img.getAttribute('data-original'), img.getAttribute('data-src'),
@@ -31,7 +31,7 @@
   };
   const items = [], seen = new Set();
   const cards = document.querySelectorAll(
-    '.movie-list a.box.item, .movie-list .item, #videos a[href], #videos .item, .movies .item, a.movie-box, .video-item, .grid-item a[href*="/v/"]'
+    '.movie-list a.box.item, .movie-list .item, .movie-list a[href*="/v/"], .is-user-page .movie-list .item, #videos a[href*="/v/"], #videos .item, .movies .item, a.movie-box, .video-item, .grid-item a[href*="/v/"], .box.item[href*="/v/"]'
   );
   cards.forEach(card => {
     // JavDB uses <a class="box item">, not a div containing a nested anchor.
@@ -50,10 +50,15 @@
       cover: pickImage(card)
     });
   });
-  const next = document.querySelector('a[rel="next"], .pagination .next a[href], a.pagination-next[href]');
+  const next = document.querySelector('a[rel="next"], .pagination .next a[href], .pagination-next[href], .pagination-list a[aria-label="Next"], .pagination-list li:last-child a[href]');
+  const isMoviePage = /\/(?:v|videos|video)\//i.test(location.pathname || '');
+  const blocked = /(?:captcha|cloudflare|verify|just a moment|驗證|验证|存取被拒|access denied)/i.test(
+    String(document.title || '') + ' ' + String(document.body?.innerText || '').slice(0, 300)
+  );
   return JSON.stringify({
     url: location.href, title: document.title.slice(0, 200),
     items: items.slice(0, 80), nextUrl: next ? sameSite(next.getAttribute('href')) : '',
-    scanned: cards.length, missingCovers: items.filter(it => !it.cover).length
+    scanned: cards.length, missingCovers: items.filter(it => !it.cover).length,
+    blocked, isMoviePage
   });
 })();
