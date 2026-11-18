@@ -244,3 +244,40 @@ const strictDetails=run('extract_details.js',scopedDoc,'https://javdb.com/v/abc1
 assert.equal(strictDetails.description,'','Generic SEO description must not be displayed');
 assert.equal(strictDetails.excerpt,'','Whole info panel is not a synopsis');
 console.log('PASS: scoped film links and no global SEO synopsis');
+
+
+// Actual /tags category groups use a selected .tag with delete button. The
+// delete URL must remove only the active tag, preserving other categories.
+const toggleDelete = {
+  getAttribute: key => key === 'onclick'
+    ? "window.location.href='/tags?c2=5&c10=1'" : null,
+};
+const selectedTag = {
+  textContent:'Selected A',
+  classList:{contains: name=>name==='is-info'},
+  querySelector:sel=>sel==='button.delete'?toggleDelete:null,
+  getAttribute:()=>null,
+};
+const otherTag = {
+  textContent:'Other B',
+  classList:{contains:()=>false},
+  querySelector:()=>null,
+  getAttribute:key=>key==='href'?'/tags?c2=5,6&c10=1':null,
+};
+const tagGroup = {
+  getAttribute:key=>key==='data-cid'?'2':null,
+  querySelector:sel=>sel==='strong'?{textContent:'主题：'}:null,
+  querySelectorAll:()=>[selectedTag,otherTag]
+};
+const tagsDoc = {
+  querySelectorAll:sel=>sel==='dt.tag-category'?[tagGroup]:[],
+  querySelector:()=>null
+};
+const actualTags=run('extract_filters.js',tagsDoc,'https://javdb.com/tags?c2=5,7&c10=1');
+assert.equal(actualTags.groups.length,1);
+assert.equal(actualTags.groups[0].title,'主题');
+assert.equal(actualTags.groups[0].links[0].selected,true);
+assert.equal(actualTags.groups[0].links[0].url,'https://javdb.com/tags?c2=5&c10=1');
+assert.equal(actualTags.groups[0].links[1].selected,false);
+assert.equal(actualTags.groups[0].links[1].url,'https://javdb.com/tags?c2=5,6&c10=1');
+console.log('PASS: real tag-category DOM, selected-tag removal, other filters retained');
