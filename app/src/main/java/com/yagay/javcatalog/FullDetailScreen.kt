@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FullDetailScreen(
     movie: MovieCard, info: MovieDetails?, extras: DetailExtras?, magnetCount: Int,
+    detailStatus: String, onRetry: () -> Unit,
     bookmarked: Boolean, userAgent: String,
     onBookmark: () -> Unit, onMagnets: () -> Unit, onWebsite: (String) -> Unit,
     onCategory: (String) -> Unit, onRelated: (MovieCard) -> Unit,
@@ -97,7 +98,21 @@ fun FullDetailScreen(
             if (description.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(description, style = MaterialTheme.typography.bodyMedium)
-            } else if (info == null) Text("正在读取网页信息，可打开网站查看完整内容。")
+            else if (info == null) {
+                Text(detailStatus.ifBlank { "正在读取桌面版网页影片资料..." },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onRetry) { Text("重新读取") }
+                    TextButton(onClick = { onWebsite(movie.url) }) { Text("检查网页") }
+                }
+            } else if (info.code.isBlank() && info.actors.isBlank() && info.studio.isBlank() &&
+                info.releaseDate.isBlank() && info.duration.isBlank()) {
+                Text(detailStatus, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick = onRetry) { Text("刷新桌面资料") }
+            }
         }
         if (links.isNotEmpty()) {
             items(links, key = { it.title + it.links.firstOrNull()?.url.orEmpty() }) { group ->
