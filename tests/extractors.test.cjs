@@ -30,3 +30,29 @@ const nav=run('extract_navigation.js',{
 assert.equal(nav.links.length,1);
 assert.equal(nav.links[0].url,'https://javdb.com/actors');
 console.log('PASS: magnet extraction, malformed links, same-site navigation');
+
+const imageNode = {
+ getAttribute: key => ({'data-original':'//c0.jdbstatic.com/covers/test.jpg',src:'data:image/gif;base64,placeholder'})[key] || null,
+ currentSrc:'',
+};
+const anchorCard = {
+ getAttribute: key => key === 'href' ? '/v/abcd12' : key === 'title' ? 'ABP-123 Test' : null,
+ matches: sel => sel === 'a[href]',
+ querySelector: sel => {
+   if (sel === '.cover img, .cover-image img, img') return imageNode;
+   if (sel === '.video-title, .title, .movie-title, .uid') return {textContent:'ABP-123 Film'};
+   if (sel === '.video-title strong, .uid') return {textContent:'ABP-123'};
+   return null;
+ },
+ textContent: 'ABP-123 Film'
+};
+const cards = run('extract_cards.js',{
+ querySelectorAll:()=>[anchorCard],
+ querySelector:()=>null,
+ title:'JavDB page'
+}, 'https://javdb.com/');
+assert.equal(cards.items.length,1,'anchor card must be detected');
+assert.equal(cards.items[0].url,'https://javdb.com/v/abcd12');
+assert.equal(cards.items[0].cover,'https://c0.jdbstatic.com/covers/test.jpg');
+assert.equal(cards.missingCovers,0);
+console.log('PASS: JavDB anchor cards, lazy covers and magnet links');
