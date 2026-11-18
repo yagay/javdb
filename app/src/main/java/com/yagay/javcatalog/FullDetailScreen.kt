@@ -4,6 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -36,14 +40,15 @@ fun FullDetailScreen(
     val links = extras?.groups.orEmpty()
     val related = extras?.related.orEmpty()
     val imageLinks = extras?.previews.orEmpty()
-    LazyColumn(contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize()) {
+    LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 CoverImage(
                     url = info?.cover?.ifBlank { movie.cover } ?: movie.cover,
                     referrer = movie.url, userAgent = userAgent,
-                    title = movie.title, modifier = Modifier.width(136.dp).height(200.dp))
+                    title = movie.title, modifier = Modifier.width(122.dp).height(175.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(info?.title?.ifBlank { movie.title } ?: movie.title,
                         style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -58,29 +63,19 @@ fun FullDetailScreen(
             }
         }
         item {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onBookmark) {
-                    Icon(if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (bookmarked) "已收藏" else "收藏")
-                }
-                OutlinedButton(onClick = onMagnets) {
-                    Icon(Icons.Default.Link, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("磁力 " + magnetCount)
-                }
-                OutlinedButton(onClick = { onWebsite(movie.url) }) { Text("网页详情") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val code = info?.code?.ifBlank { movie.code } ?: movie.code
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("影片番号", code))
-                }) { Text("复制番号") }
+                }, modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp)) { Text("复制番号") }
+                OutlinedButton(onClick = { onWebsite(movie.url) }, modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp)) { Text("网站功能") }
             }
         }
         item {
-            Text("影片资料", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("影片信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             val fields = listOf(
                 "发行日期" to info?.releaseDate.orEmpty(),
                 "时长" to info?.duration.orEmpty(),
@@ -122,20 +117,20 @@ fun FullDetailScreen(
         }
         if (imageLinks.isNotEmpty()) {
             item {
-                Text("预览图片 · " + imageLinks.size, style = MaterialTheme.typography.titleLarge,
+                Text("预览图片 · " + imageLinks.size, style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(imageLinks) { url ->
                         CoverImage(url, movie.url, userAgent, "预览图片",
-                            Modifier.width(204.dp).height(120.dp).clickable { fullImage = url })
+                            Modifier.width(200.dp).height(118.dp).clickable { fullImage = url })
                     }
                 }
             }
         }
         if (related.isNotEmpty()) {
             item {
-                Text("相关影片 · " + related.size, style = MaterialTheme.typography.titleLarge,
+                Text("相关影片 · " + related.size, style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -154,7 +149,7 @@ fun FullDetailScreen(
         }
         if (!extras?.actions.isNullOrEmpty()) {
             item {
-                Text("网站提供的操作", style = MaterialTheme.typography.titleLarge,
+                Text("更多网站功能", style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold)
                 Text("账户功能和短评按实际网页登录及权限状态开放。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -168,6 +163,25 @@ fun FullDetailScreen(
                 }
             }
         }
+    }
+    Surface(tonalElevation = 3.dp, shadowElevation = 4.dp) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onBookmark, modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 9.dp)) {
+                Icon(if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = null)
+                Spacer(Modifier.width(5.dp))
+                Text(if (bookmarked) "已收藏" else "收藏")
+            }
+            Button(onClick = onMagnets, modifier = Modifier.weight(1.4f),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 9.dp)) {
+                Icon(Icons.Default.Link, contentDescription = null)
+                Spacer(Modifier.width(5.dp))
+                Text("磁力资源 · " + magnetCount)
+            }
+        }
+    }
     }
     fullImage?.let { url ->
         AlertDialog(
