@@ -11,6 +11,7 @@ data class DetailExtras(
     val reviewCount: String,
     val groups: List<DetailGroup>,
     val previews: List<String>,
+    val recommendations: List<RelatedMovie>,
     val related: List<RelatedMovie>,
     val actions: List<DetailLink>,
 ) {
@@ -40,14 +41,19 @@ data class DetailExtras(
                     arr.optString(i).take(2048).takeIf { it.startsWith("https://") }?.let(::add)
                 }
             }.distinct()
-            val related = buildList {
-                val arr = obj.optJSONArray("related")
-                if (arr != null) for (i in 0 until minOf(arr.length(),24)) {
+            fun movieCards(key: String, limit: Int) = buildList {
+                val arr = obj.optJSONArray(key)
+                if (arr != null) for (i in 0 until minOf(arr.length(),limit)) {
                     val item = arr.optJSONObject(i) ?: continue
                     val url = item.optString("url").take(2048)
-                    if (url.isNotBlank()) add(RelatedMovie(url,item.optString("title").take(160),item.optString("cover").take(2048)))
+                    if (url.startsWith("https://")) add(RelatedMovie(url,
+                        item.optString("title").take(160),item.optString("cover").take(2048)))
                 }
             }.distinctBy { it.url }
+            val recommendations = movieCards("recommendations", 36)
+            val related = movieCards("related", 24).filterNot { movie ->
+                recommendations.any { it.url == movie.url }
+            }
             val actions = buildList {
                 val arr = obj.optJSONArray("actions")
                 if (arr != null) for (i in 0 until minOf(arr.length(),30)) {
@@ -58,7 +64,7 @@ data class DetailExtras(
                 }
             }.distinctBy { it.url }
             return DetailExtras(obj.optString("url"),obj.optString("score").take(40),
-                obj.optString("reviewCount").take(80),groups,previews,related,actions)
+                obj.optString("reviewCount").take(80),groups,previews,recommendations,related,actions)
         }
     }
 }
