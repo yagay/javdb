@@ -39,6 +39,7 @@ fun FullDetailScreen(
     val context = LocalContext.current
     var fullImage by remember { mutableStateOf<String?>(null) }
     val links = extras?.groups.orEmpty()
+    val recommendations = extras?.recommendations.orEmpty()
     val related = extras?.related.orEmpty()
     val imageLinks = extras?.previews.orEmpty()
     Column(Modifier.fillMaxSize()) {
@@ -139,6 +140,26 @@ fun FullDetailScreen(
                     items(imageLinks) { url ->
                         CoverImage(url, movie.url, userAgent, "预览图片",
                             Modifier.width(200.dp).height(118.dp).clickable { fullImage = url })
+                    }
+                }
+            }
+        }
+        if (recommendations.isNotEmpty()) {
+            item {
+                Text("你可能也喜欢 · " + recommendations.size,
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(recommendations, key = { "rec-" + it.url }) { suggested ->
+                        Column(Modifier.width(112.dp).clickable {
+                            onRelated(MovieCard(suggested.url, suggested.title, "", suggested.cover))
+                        }) {
+                            CoverImage(suggested.cover, movie.url, userAgent, suggested.title,
+                                Modifier.fillMaxWidth().aspectRatio(0.70f))
+                            Spacer(Modifier.height(4.dp))
+                            Text(suggested.title, style = MaterialTheme.typography.labelSmall,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
