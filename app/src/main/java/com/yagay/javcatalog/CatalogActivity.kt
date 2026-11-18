@@ -63,7 +63,7 @@ private fun sameMoviePage(first: String, second: String): Boolean {
 }
 
 private enum class PageTab(val title: String) {
-    HOME("发现"), LIST("分类"), SEARCH("搜索"), SAVED("收藏"), MINE("我的")
+    HOME("首页"), LIST("分类"), RANK("排行"), SEARCH("搜索"), SAVED("收藏"), MINE("我的")
 }
 
 class CatalogActivity : ComponentActivity() {
@@ -228,6 +228,8 @@ class CatalogActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) dark else light) {
                 var tab by remember { mutableStateOf(PageTab.HOME) }
+                var showSiteMenu by remember { mutableStateOf(false) }
+                var showDirectory by remember { mutableStateOf(true) }
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
                 var webDetail by remember { mutableStateOf(false) }
@@ -247,7 +249,9 @@ class CatalogActivity : ComponentActivity() {
                     if (!valid(url)) return
                     selected = null
                     showFilters = false
-                    tab = PageTab.LIST
+                    val route = Uri.parse(url).path.orEmpty()
+                    tab = if (route.startsWith("/rankings")) PageTab.RANK else PageTab.LIST
+                    showDirectory = false
                     openSite(url)
                 }
                 fun openMovie(card: MovieCard) {
@@ -270,6 +274,8 @@ class CatalogActivity : ComponentActivity() {
                             navigationIcon = {
                                 if (selected != null) IconButton(onClick = { selected = null }) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                } else IconButton(onClick = { showSiteMenu = true }) {
+                                    Icon(Icons.Default.Menu, contentDescription = "网站栏目")
                                 }
                             },
                             actions = {
@@ -291,14 +297,29 @@ class CatalogActivity : ComponentActivity() {
                     },
                     bottomBar = {
                         if (selected == null) NavigationBar {
-                            PageTab.entries.forEach { item ->
+                            PageTab.entries.filter { it != PageTab.SEARCH }.forEach { item ->
                                 NavigationBarItem(
                                     selected = tab == item,
-                                    onClick = { tab = item },
+                                    onClick = {
+                                        tab = item
+                                        when (item) {
+                                            PageTab.HOME -> openSite(SITE)
+                                            PageTab.LIST -> {
+                                                showDirectory = true
+                                                openSite(SITE + "tags")
+                                            }
+                                            PageTab.RANK -> {
+                                                showDirectory = false
+                                                openSite(SITE + "rankings")
+                                            }
+                                            else -> Unit
+                                        }
+                                    },
                                     icon = {
                                         Icon(when (item) {
                                             PageTab.HOME -> Icons.Default.Home
                                             PageTab.LIST -> Icons.Default.GridView
+                                            PageTab.RANK -> Icons.Default.EmojiEvents
                                             PageTab.SEARCH -> Icons.Default.Search
                                             PageTab.SAVED -> Icons.Default.Bookmark
                                             PageTab.MINE -> Icons.Default.Person
@@ -364,8 +385,17 @@ class CatalogActivity : ComponentActivity() {
                             )
 
                         } else when (tab) {
-                            PageTab.HOME, PageTab.LIST -> {
+                            PageTab.HOME, PageTab.LIST, PageTab.RANK -> {
                                 Column {
+                                    if (tab == PageTab.LIST && showDirectory) {
+                                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
+                                            item {
+                                                MobilePortal(currentUrl.value, navigation.value, siteFilters.value,
+                                                    rankingMode = false, onOpen = { openCategory(it) },
+                                                    onFilters = { showFilters = true })
+                                            }
+                                        }
+                                    } else {
                                     if (tab == PageTab.HOME) {
                                         Text("发现影片", style = MaterialTheme.typography.headlineMedium,
                                             modifier = Modifier.padding(16.dp))
@@ -396,7 +426,7 @@ class CatalogActivity : ComponentActivity() {
                                             }
                                         }
                                     }
-                                    if (tab == PageTab.LIST) {
+                                    if (tab == PageTab.LIST || tab == PageTab.RANK) {
                                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Button(onClick = { showFilters = true }) {
@@ -407,7 +437,13 @@ class CatalogActivity : ComponentActivity() {
                                             OutlinedButton(onClick = { openLegacy(currentUrl.value) }) { Text("原网页") }
                                         }
                                         val groups = siteFilters.value?.groups.orEmpty()
-                                        val quick = groups.flatMap { it.links }.distinctBy { it.url }.take(12)
+                                        if (tab == PageTab.RANK) {
+                                            Text("榜单时间、分类和排序按当前网页筛选项显示",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                                        }
+                                        val quick = groups.flatMap { it.links }.distinctBy { it.url }.take(16)
                                         if (quick.isNotEmpty()) Row(
                                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -442,6 +478,7 @@ class CatalogActivity : ComponentActivity() {
                                                 onClick = { movieList.value?.nextUrl?.let(::openSite) }
                                             ) { Text("下一页") }
                                         }
+                                    }
                                     }
                                 }
                             }
@@ -493,6 +530,14 @@ class CatalogActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+                if (showSiteMenu) {
+                    NativeSiteMenu(navigation = navigation.value,
+                        onOpen = { url ->
+                            showSiteMenu = false
+                            openCategory(url)
+                        },
+                        onDismiss = { showSiteMenu = false })
                 }
                 if (showFilters) {
                     ModalBottomSheet(onDismissRequest = { showFilters = false }) {
