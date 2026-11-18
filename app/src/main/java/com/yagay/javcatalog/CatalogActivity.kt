@@ -194,6 +194,7 @@ class CatalogActivity : ComponentActivity() {
                 var tab by remember { mutableStateOf(PageTab.HOME) }
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
+                var webDetail by rememberSaveable { mutableStateOf(true) }
                 var showMagnets by remember { mutableStateOf(false) }
                 var showFilters by remember { mutableStateOf(false) }
                 var filterText by remember { mutableStateOf("") }
@@ -222,18 +223,25 @@ class CatalogActivity : ComponentActivity() {
                     openSite(card.url)
                 }
                 BackHandler(selected != null || tab != PageTab.HOME) {
-                    if (selected != null) selected = null else tab = PageTab.HOME
+                    if (selected != null) {
+                        if (webDetail && browser.canGoBack()) browser.goBack()
+                        else selected = null
+                    } else tab = PageTab.HOME
                 }
                 Scaffold(
                     topBar = {
                         TopAppBar(
-                            title = { Text(if (selected == null) tab.title else "影片详情", fontWeight = FontWeight.Bold) },
+                            title = { Text(if (selected == null) tab.title else if (webDetail) "影片详情 · 网页原样" else "影片详情 · 简洁", fontWeight = FontWeight.Bold) },
                             navigationIcon = {
                                 if (selected != null) IconButton(onClick = { selected = null }) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                                 }
                             },
                             actions = {
+                                if (selected != null) IconButton(onClick = { webDetail = !webDetail }) {
+                                    Icon(if (webDetail) Icons.Default.ViewAgenda else Icons.Default.Language,
+                                        contentDescription = if (webDetail) "切换简洁资料" else "切换网页原样")
+                                }
                                 if (selected == null) IconButton(onClick = { showFilters = true }) {
                                     Icon(Icons.Default.Tune, contentDescription = "分类筛选")
                                 }
@@ -270,8 +278,34 @@ class CatalogActivity : ComponentActivity() {
                     Column(Modifier.fillMaxSize().padding(insets)) {
                         if (loading.value) LinearProgressIndicator(Modifier.fillMaxWidth())
                         // One persistent WebView keeps login cookies and performs only user-driven page loading.
-                        AndroidView(factory = { browser }, modifier = Modifier.fillMaxWidth().height(1.dp))
-                        if (selected != null) {
+                        AndroidView(
+                            factory = { browser },
+                            modifier = if (selected != null && webDetail)
+                                Modifier.fillMaxWidth().weight(1f)
+                            else Modifier.fillMaxWidth().height(1.dp)
+                        )
+                        if (selected != null && webDetail) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val url = currentUrl.value
+                                val saved = savedPages.value.any { it.url == url }
+                                OutlinedButton(onClick = {
+                                    if (store.hasBookmark(url)) store.removeBookmark(url)
+                                    else store.bookmark(url, browser.title ?: selected?.title ?: url)
+                                    savedPages.value = store.pages("bookmarks")
+                                }, modifier = Modifier.weight(1f), enabled = valid(url)) {
+                                    Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                        contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(if (saved) "已收藏" else "收藏")
+                                }
+                                Button(onClick = { showMagnets = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.Link, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("磁力")
+                                }
+                            }
+                        } else if (selected != null) {
                             val movie = selected!!
                             val info = details.value?.takeIf { it.url == movie.url }
                             FullDetailScreen(
@@ -461,7 +495,7 @@ class CatalogActivity : ComponentActivity() {
                     }
                 }
                 if (showMagnets) {
-                    val origin = selected?.url
+                    val origin = currentUrl.value.takeIf { valid(it) }
                     val all = magnetList.value.filter { origin != null && it.pageUrl == origin }
                     val filtered = MagnetTools.filter(all, filterText, subtitlesOnly,
                         minSize.toIntOrNull()?.coerceAtLeast(0) ?: 0,
