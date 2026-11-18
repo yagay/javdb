@@ -209,3 +209,38 @@ const unrelatedImageOnly = {
 const unrelatedResult=run('extract_detail_extras.js',unrelatedImageOnly,'https://javdb.com/v/source123');
 assert.equal(unrelatedResult.previews.length,0);
 console.log('PASS: unrelated tile pictures excluded from previews');
+
+
+// Film metadata must be scoped to the movie info panel, not global recommendations
+// or navbar links; SEO description is not a film synopsis.
+const fakeLink = (url,title)=>({
+  textContent:title,
+  getAttribute:k=>k==='href'?url:k==='title'?title:null
+});
+const actorLink=fakeLink('/actors/current-person','Current actor');
+const tagLink=fakeLink('/tags/current-tag','Current tag');
+const extraneous=[fakeLink('/actors/other','Unrelated actor'),fakeLink('/tags/random','Random tag')];
+const panel = {querySelectorAll: selector=>selector==='a[href]'?[actorLink,tagLink]:[]};
+const scopedDoc = {
+  querySelector: selector=>{
+    if(selector==='.movie-panel-info, .video-meta-panel, .video-detail .movie-panel-info')return panel;
+    if(selector==='meta[name="description"]')return {getAttribute:()=> 'An magnet links sharing website for adult movies'};
+    return null;
+  },
+  querySelectorAll: selector=>{
+    if(selector.includes('h1, h2, h3'))return [];
+    if(selector==='a[href]')return extraneous;
+    return [];
+  },
+  title:'ABC-123 title'
+};
+const strictExtras=run('extract_detail_extras.js',scopedDoc,'https://javdb.com/v/abc123');
+const actorSection=strictExtras.sections.find(s=>s.title==='演员');
+assert.equal(actorSection.links.length,1);
+assert.equal(actorSection.links[0].title,'Current actor');
+assert.equal(strictExtras.sections.find(s=>s.title==='标签').links[0].title,'Current tag');
+assert.ok(!JSON.stringify(strictExtras.sections).includes('Unrelated actor'));
+const strictDetails=run('extract_details.js',scopedDoc,'https://javdb.com/v/abc123');
+assert.equal(strictDetails.description,'','Generic SEO description must not be displayed');
+assert.equal(strictDetails.excerpt,'','Whole info panel is not a synopsis');
+console.log('PASS: scoped film links and no global SEO synopsis');
