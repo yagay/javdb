@@ -194,7 +194,7 @@ class CatalogActivity : ComponentActivity() {
                 var tab by remember { mutableStateOf(PageTab.HOME) }
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
-                var webDetail by rememberSaveable { mutableStateOf(true) }
+                var webDetail by rememberSaveable { mutableStateOf(false) }
                 var showMagnets by remember { mutableStateOf(false) }
                 var showFilters by remember { mutableStateOf(false) }
                 var filterText by remember { mutableStateOf("") }
@@ -224,14 +224,13 @@ class CatalogActivity : ComponentActivity() {
                 }
                 BackHandler(selected != null || tab != PageTab.HOME) {
                     if (selected != null) {
-                        if (webDetail && browser.canGoBack()) browser.goBack()
-                        else selected = null
+                        selected = null
                     } else tab = PageTab.HOME
                 }
                 Scaffold(
                     topBar = {
                         TopAppBar(
-                            title = { Text(if (selected == null) tab.title else if (webDetail) "影片详情 · 网页原样" else "影片详情 · 简洁", fontWeight = FontWeight.Bold) },
+                            title = { Text(if (selected == null) tab.title else "影片详情", fontWeight = FontWeight.Bold) },
                             navigationIcon = {
                                 if (selected != null) IconButton(onClick = { selected = null }) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = "返回")
@@ -240,7 +239,7 @@ class CatalogActivity : ComponentActivity() {
                             actions = {
                                 if (selected != null) IconButton(onClick = { webDetail = !webDetail }) {
                                     Icon(if (webDetail) Icons.Default.ViewAgenda else Icons.Default.Language,
-                                        contentDescription = if (webDetail) "切换简洁资料" else "切换网页原样")
+                                        contentDescription = if (webDetail) "使用原生手机布局" else "查看网站原页")
                                 }
                                 if (selected == null) IconButton(onClick = { showFilters = true }) {
                                     Icon(Icons.Default.Tune, contentDescription = "分类筛选")
