@@ -149,3 +149,63 @@ assert.ok(sortGroup.links[1].selected);
 assert.ok(sortGroup.links[1].url.includes('c2=5'),'existing filters must be preserved');
 assert.ok(sortGroup.links[1].url.includes('sort=rating'),'selected sort must be encoded');
 console.log('PASS: desktop form sorting and existing-filter preservation');
+
+
+// Detail previews must never swallow unrelated .tile-images cards; recommendations
+// must come from the "你可能也喜歡" heading's own section.
+const sampleImg = {
+  tagName:'IMG', currentSrc:'',
+  getAttribute:k=> k==='data-src' ? 'https://cdn.example.com/sample_01.jpg' : null,
+  closest:()=>null
+};
+const sampleLink = {
+  tagName:'A', getAttribute:k=>k==='href'?'https://cdn.example.com/sample_01_large.jpg':null,
+  querySelector:sel=>sel==='img'?sampleImg:null,
+  closest:()=>null
+};
+const sampleContainer = {querySelectorAll:()=>[sampleLink]};
+const recommendationImg = {
+  tagName:'IMG',currentSrc:'',
+  getAttribute:k=>k==='data-original'?'https://cdn.example.com/recommendation_cover.jpg':null
+};
+const recommendationLink = {
+  tagName:'A', textContent:'ABC-456 recommended', 
+  getAttribute:k=>k==='href'?'/v/recommend456':k==='title'?'ABC-456 recommended':null,
+  querySelector:sel=>sel==='img'?recommendationImg:null,
+  closest:()=>null
+};
+const recommendationRoot = {querySelectorAll:()=>[recommendationLink]};
+const recommendationHeading = {
+  textContent:'你可能也喜歡',
+  closest:()=>null,
+  parentElement:recommendationRoot,
+  nextElementSibling:null
+};
+const detailDocument = {
+  querySelector:()=>null,
+  querySelectorAll:selector=>{
+    if(selector==='.preview-images') return [sampleContainer];
+    if(selector.includes('h1, h2, h3')) return [recommendationHeading];
+    return [];
+  }
+};
+const extraResults=run('extract_detail_extras.js',detailDocument,'https://javdb.com/v/source123');
+assert.equal(extraResults.previews.length,1);
+assert.equal(extraResults.previews[0],'https://cdn.example.com/sample_01_large.jpg');
+assert.equal(extraResults.recommendations.length,1);
+assert.equal(extraResults.recommendations[0].url,'https://javdb.com/v/recommend456');
+assert.equal(extraResults.related.length,0);
+console.log('PASS: screenshot-only previews and headed recommendations');
+
+const unrelatedImageOnly = {
+  querySelector:()=>null,
+  querySelectorAll:selector=>{
+    // Previous broad .tile-images query would incorrectly include this item.
+    if(selector.includes('.tile-images a') && selector.includes('.sample-images a'))
+      return [recommendationLink];
+    return [];
+  }
+};
+const unrelatedResult=run('extract_detail_extras.js',unrelatedImageOnly,'https://javdb.com/v/source123');
+assert.equal(unrelatedResult.previews.length,0);
+console.log('PASS: unrelated tile pictures excluded from previews');
