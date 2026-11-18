@@ -583,10 +583,10 @@ class CatalogActivity : ComponentActivity() {
                                         )
                                     } else if (cards.isEmpty()) Text(pageStatus.value,
                                         modifier = Modifier.padding(16.dp))
-                                    else LazyVerticalGrid(columns = GridCells.Fixed(2),
-                                        contentPadding = PaddingValues(12.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    else LazyVerticalGrid(columns = GridCells.Fixed(3),
+                                        contentPadding = PaddingValues(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         items(cards, key = { it.url }) { movie ->
                                             PosterCard(movie, browser.settings.userAgentString, onImageFailure = { imageFailures.value++ }) { openMovie(movie) }
                                         }
@@ -818,13 +818,14 @@ internal fun CoverImage(url: String, referrer: String, userAgent: String, title:
 @Composable
 private fun PosterCard(movie: MovieCard, userAgent: String, onImageFailure: () -> Unit, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp)) {
+        shape = RoundedCornerShape(8.dp)) {
         CoverImage(url = movie.cover, referrer = movie.url, userAgent = userAgent,
-            title = movie.title, modifier = Modifier.fillMaxWidth().height(208.dp),
+            title = movie.title, modifier = Modifier.fillMaxWidth().aspectRatio(0.70f),
             onFailure = onImageFailure)
-        Column(Modifier.padding(10.dp)) {
-            Text(movie.code.ifBlank { "影片" }, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(movie.title, style = MaterialTheme.typography.bodySmall,
+        Column(Modifier.padding(horizontal = 5.dp, vertical = 6.dp)) {
+            Text(movie.code.ifBlank { "影片" }, fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            Text(movie.title, style = MaterialTheme.typography.labelSmall,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
