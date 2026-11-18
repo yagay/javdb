@@ -194,7 +194,7 @@ class CatalogActivity : ComponentActivity() {
                 var tab by remember { mutableStateOf(PageTab.HOME) }
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
-                var webDetail by rememberSaveable { mutableStateOf(false) }
+                var webDetail by remember { mutableStateOf(false) }
                 var showMagnets by remember { mutableStateOf(false) }
                 var showFilters by remember { mutableStateOf(false) }
                 var filterText by remember { mutableStateOf("") }
