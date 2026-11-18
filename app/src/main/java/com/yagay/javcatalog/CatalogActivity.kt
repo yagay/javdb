@@ -288,16 +288,6 @@ class CatalogActivity : ComponentActivity() {
                 var webDetail by remember { mutableStateOf(false) }
                 var showMagnets by remember { mutableStateOf(false) }
                 var showFilters by remember { mutableStateOf(false) }
-                var filterText by remember { mutableStateOf("") }
-                var subtitlesOnly by remember { mutableStateOf(false) }
-                var minSize by remember { mutableStateOf("") }
-                var maxSize by remember { mutableStateOf("") }
-                var unknownSize by remember { mutableStateOf(true) }
-                val selectedHashes = remember { mutableStateListOf<String>() }
-                fun copyItems(items: List<Magnet>) {
-                    if (items.isNotEmpty()) getSystemService(ClipboardManager::class.java)
-                        .setPrimaryClip(ClipData.newPlainText("Magnets", items.joinToString("\n") { it.uri }))
-                }
                 fun openCategory(url: String) {
                     if (!valid(url)) return
                     selected = null
@@ -650,87 +640,73 @@ class CatalogActivity : ComponentActivity() {
                 }
                 if (showMagnets) {
                     val origin = currentUrl.value.takeIf { valid(it) }
-                    val all = magnetList.value.filter { origin != null && it.pageUrl == origin }
-                    val filtered = MagnetTools.filter(all, filterText, subtitlesOnly,
-                        minSize.toIntOrNull()?.coerceAtLeast(0) ?: 0,
-                        maxSize.toIntOrNull()?.coerceAtLeast(0) ?: 0, unknownSize)
-                    val chosen = filtered.filter { MagnetTools.hash(it.uri) in selectedHashes }
-                    ModalBottomSheet(onDismissRequest = { showMagnets = false }) {
-                        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("磁力资源 · ${filtered.size}/${all.size}",
-                                style = MaterialTheme.typography.titleLarge)
-                            OutlinedTextField(filterText, { filterText = it }, singleLine = true,
-                                label = { Text("名称 / 字幕关键词") }, modifier = Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(minSize, { minSize = it.filter(Char::isDigit).take(8) },
-                                    singleLine = true, label = { Text("最小 MB") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f))
-                                OutlinedTextField(maxSize, { maxSize = it.filter(Char::isDigit).take(8) },
-                                    singleLine = true, label = { Text("最大 MB (0无限制)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f))
+                    val magnets = magnetList.value.filter { origin != null && it.pageUrl == origin }
+                    var selectedMagnet by remember { mutableStateOf<Magnet?>(null) }
+                    var openError by remember { mutableStateOf(false) }
+                    ModalBottomSheet(onDismissRequest = {
+                        selectedMagnet = null
+                        showMagnets = false
+                    }) {
+                        Column(Modifier.fillMaxWidth().fillMaxHeight(0.80f).padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("磁力资源 · ${magnets.size}", style = MaterialTheme.typography.titleLarge)
+                            if (magnets.isEmpty()) {
+                                Text("当前影片暂无可读取的磁力链接。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Checkbox(subtitlesOnly, { subtitlesOnly = it })
-                                Text("仅字幕")
-                                Checkbox(unknownSize, { unknownSize = it })
-                                Text("未知大小")
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = {
-                                    filterText = ""; subtitlesOnly = false; minSize = "";
-                                    maxSize = ""; unknownSize = true; selectedHashes.clear()
-                                }) { Text("重置") }
-                                TextButton(onClick = {
-                                    selectedHashes.clear()
-                                    selectedHashes.addAll(filtered.mapNotNull { MagnetTools.hash(it.uri) })
-                                }) { Text("全选") }
-                                TextButton(onClick = { selectedHashes.clear() }) { Text("清空") }
-                                Text("已选 ${chosen.size}", modifier = Modifier.padding(top = 12.dp))
-                            }
-                            if (filtered.isEmpty()) Text("没有符合条件的磁力，可以调整筛选或打开网页。")
-                            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                items(filtered, key = { MagnetTools.hash(it.uri) ?: it.uri }) { magnet ->
-                                    val hash = MagnetTools.hash(magnet.uri) ?: magnet.uri
+                            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                items(magnets, key = { it.uri }) { magnet ->
                                     ListItem(
-                                        headlineContent = { Text(magnet.label, maxLines = 2) },
-                                        supportingContent = { Text(magnet.size) },
-                                        leadingContent = {
-                                            Checkbox(selectedHashes.contains(hash), { enabled ->
-                                                if (enabled && hash !in selectedHashes) selectedHashes.add(hash)
-                                                if (!enabled) selectedHashes.remove(hash)
-                                            })
-                                        },
+                                        headlineContent = { Text(magnet.label.ifBlank { "磁力链接" }, maxLines = 3) },
                                         trailingContent = {
-                                            IconButton(onClick = { copyItems(listOf(magnet)) }) {
-                                                Icon(Icons.Default.ContentCopy, contentDescription = "复制")
-                                            }
+                                            Icon(Icons.Default.ChevronRight, contentDescription = "打开操作")
                                         },
                                         modifier = Modifier.clickable {
-                                            if (hash in selectedHashes) selectedHashes.remove(hash)
-                                            else selectedHashes.add(hash)
+                                            selectedMagnet = magnet
+                                            openError = false
                                         }
                                     )
                                 }
                             }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { copyItems(chosen) }, enabled = chosen.isNotEmpty(),
-                                    modifier = Modifier.weight(1f)) { Text("复制选中") }
-                                Button(onClick = {
-                                    chosen.forEach(store::saveMagnet)
-                                    savedMagnets.value = store.magnets()
-                                }, enabled = chosen.isNotEmpty(), modifier = Modifier.weight(1f)) {
-                                    Text("保存选中")
-                                }
-                            }
-                            TextButton(onClick = {
-                                openLegacy(origin ?: currentUrl.value)
-                                showMagnets = false
-                            }) { Text("网页完整功能") }
                             Spacer(Modifier.height(8.dp))
                         }
+                    }
+                    selectedMagnet?.let { magnet ->
+                        AlertDialog(
+                            onDismissRequest = { selectedMagnet = null },
+                            title = { Text("磁力链接") },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(magnet.label.ifBlank { "请选择操作" }, maxLines = 4)
+                                    if (openError) Text(
+                                        "未找到能够打开磁力链接的应用，请先安装支持磁力链接的客户端，或复制链接。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(magnet.uri)).apply {
+                                        addCategory(Intent.CATEGORY_BROWSABLE)
+                                    }
+                                    try {
+                                        startActivity(intent)
+                                        selectedMagnet = null
+                                        showMagnets = false
+                                    } catch (_: android.content.ActivityNotFoundException) {
+                                        openError = true
+                                    }
+                                }) { Text("打开") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = {
+                                    getSystemService(ClipboardManager::class.java).setPrimaryClip(
+                                        ClipData.newPlainText("Magnet", magnet.uri))
+                                    selectedMagnet = null
+                                }) { Text("复制") }
+                            }
+                        )
                     }
                 }
             }
