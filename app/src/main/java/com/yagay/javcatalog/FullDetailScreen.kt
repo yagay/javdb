@@ -98,7 +98,7 @@ fun FullDetailScreen(
             if (description.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(description, style = MaterialTheme.typography.bodyMedium)
-            else if (info == null) {
+            } else if (info == null) {
                 Text(detailStatus.ifBlank { "正在读取桌面版网页影片资料..." },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall)
