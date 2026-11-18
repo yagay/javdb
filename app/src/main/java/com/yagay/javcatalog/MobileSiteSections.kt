@@ -52,7 +52,16 @@ internal fun MobilePortal(
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val url = currentUrl.substringBefore('?').trimEnd('/')
-        if (!rankingMode) {
+        val isTagsPage = url == "https://javdb.com/tags"
+        if (isTagsPage) {
+            Text("标签筛选", style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 14.dp, top = 8.dp))
+            Text("按网站原有分类选择标签，已选择的标签可再次点击取消。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 14.dp))
+        } else if (!rankingMode) {
             Text("浏览分类", style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 14.dp, top = 8.dp))
             mobileSiteEntries.chunked(2).forEach { row ->
@@ -83,6 +92,11 @@ internal fun MobilePortal(
                 TextButton(onClick = { onOpen("https://javdb.com/tags") }) { Text("全部标签") }
             }
         }
+        if (isTagsPage && filters?.groups.isNullOrEmpty()) {
+            Text("正在读取网站标签分类，若页面要求登录请先完成网页登录。",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+        }
         filters?.groups?.forEach { group ->
             if (group.links.isNotEmpty()) {
                 Column(Modifier.padding(top = 3.dp),
@@ -101,7 +115,7 @@ internal fun MobilePortal(
                 }
             }
         }
-        navigation?.links?.filterNot { link ->
+        if (!isTagsPage) navigation?.links?.filterNot { link ->
             mobileSiteEntries.any { it.url.trimEnd('/') == link.url.substringBefore('?').trimEnd('/') }
         }?.take(18)?.takeIf { it.isNotEmpty() }?.let { links ->
             Text("更多网页栏目", style = MaterialTheme.typography.titleSmall,
