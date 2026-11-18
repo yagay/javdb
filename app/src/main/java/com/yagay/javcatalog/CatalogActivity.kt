@@ -14,6 +14,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebResourceError
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -96,12 +97,15 @@ class CatalogActivity : ComponentActivity() {
         val imageFailures = mutableStateOf(0)
         val detailStatus = mutableStateOf("正在连接桌面网页...")
         val pageStatus = mutableStateOf("正在加载桌面网站...")
+        val loginMode = mutableStateOf(false)
+        val loginReturnUrl = mutableStateOf(SITE)
+        val loginStatus = mutableStateOf("在 JavDB 官方网页中登录；账号和密码不会经过 App 自建表单。")
         var generation = 0
         fun decode(value: String): String? = runCatching { JSONArray("[" + value + "]").getString(0) }.getOrNull()
         lateinit var browser: WebView
         fun parsePage() {
             val url = browser.url ?: return
-            if (!valid(url)) return
+            if (!valid(url) || loginMode.value) return
             val request = generation
             browser.evaluateJavascript(statusJs) { value ->
                 if (request == generation && browser.url == url) {
@@ -219,6 +223,7 @@ class CatalogActivity : ComponentActivity() {
                 .replace(" Mobile Safari/", " Safari/")
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+            webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url?.toString() ?: return true
@@ -241,6 +246,13 @@ class CatalogActivity : ComponentActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     loading.value = false
                     currentUrl.value = url ?: SITE
+                    if (loginMode.value) {
+                        CookieManager.getInstance().flush()
+                        loginStatus.value = if (url?.let { it.contains("/login") || it.contains("/sign_in") } == true)
+                            "请在网页内完成登录和验证码；完成后点击下方「返回 App」。"
+                        else "页面已跳转。请确认网站显示已登录，再点击「返回 App」。"
+                        return
+                    }
                     detailStatus.value = "网页加载完成，正在解析桌面详情..."
                     parsePage()
                     val expectedUrl = url
@@ -272,6 +284,19 @@ class CatalogActivity : ComponentActivity() {
         }
         fun openSite(url: String) {
             if (valid(url)) browser.loadUrl(url)
+        }
+        fun openLogin() {
+            if (!loginMode.value) {
+                loginReturnUrl.value = browser.url?.takeIf { valid(it) && !it.contains("/login") } ?: SITE
+                loginMode.value = true
+                loginStatus.value = "通过 JavDB 网页完成登录，无须向 App 输入或保存密码。"
+                browser.loadUrl(SITE + "login")
+            }
+        }
+        fun finishLogin() {
+            CookieManager.getInstance().flush()
+            loginMode.value = false
+            browser.loadUrl(loginReturnUrl.value.takeIf { valid(it) } ?: SITE)
         }
         fun openLegacy(url: String) {
             startActivity(Intent(this, MainActivity::class.java).apply {
@@ -309,8 +334,10 @@ class CatalogActivity : ComponentActivity() {
                     magnetList.value = emptyList()
                     openSite(card.url)
                 }
-                BackHandler(selected != null || tab != PageTab.HOME) {
-                    if (selected != null) {
+                BackHandler(loginMode.value || selected != null || tab != PageTab.HOME) {
+                    if (loginMode.value) {
+                        finishLogin()
+                    } else if (selected != null) {
                         selected = null
                         if (browser.canGoBack()) browser.goBack()
                     } else if (tab == PageTab.LIST && !showDirectory) {
@@ -324,15 +351,21 @@ class CatalogActivity : ComponentActivity() {
                 Scaffold(
                     topBar = {
                         TopAppBar(
-                            title = { Text(if (selected == null) tab.title else "影片详情", fontWeight = FontWeight.Bold) },
+                            title = { Text(if (loginMode.value) "JavDB 账号登录" else if (selected == null) tab.title else "影片详情", fontWeight = FontWeight.Bold) },
                             navigationIcon = {
-                                if (selected != null) IconButton(onClick = { selected = null }) {
+                                if (loginMode.value) IconButton(onClick = { finishLogin() }) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回 App")
+                                } else if (selected != null) IconButton(onClick = { selected = null }) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                                 } else IconButton(onClick = { showSiteMenu = true }) {
                                     Icon(Icons.Default.Menu, contentDescription = "网站栏目")
                                 }
                             },
                             actions = {
+                                if (!loginMode.value) {
+                                IconButton(onClick = { openLogin() }) {
+                                    Icon(Icons.Default.AccountCircle, contentDescription = "登录 JavDB")
+                                }
                                 if (selected != null) IconButton(onClick = { webDetail = !webDetail }) {
                                     Icon(if (webDetail) Icons.Default.ViewAgenda else Icons.Default.Language,
                                         contentDescription = if (webDetail) "使用原生手机布局" else "查看网站原页")
@@ -346,11 +379,12 @@ class CatalogActivity : ComponentActivity() {
                                 IconButton(onClick = { if (selected == null) tab = PageTab.SEARCH else showMagnets = true }) {
                                     Icon(if (selected == null) Icons.Default.Search else Icons.Default.Link, contentDescription = "搜索或磁力")
                                 }
+                                }
                             }
                         )
                     },
                     bottomBar = {
-                        if (selected == null) NavigationBar {
+                        if (!loginMode.value && selected == null) NavigationBar {
                             PageTab.entries.filter { it != PageTab.SEARCH }.forEach { item ->
                                 NavigationBarItem(
                                     selected = tab == item,
@@ -390,11 +424,25 @@ class CatalogActivity : ComponentActivity() {
                         // One persistent WebView keeps login cookies and performs only user-driven page loading.
                         AndroidView(
                             factory = { browser },
-                            modifier = if (selected != null && webDetail)
+                            modifier = if (loginMode.value || selected != null && webDetail)
                                 Modifier.fillMaxWidth().weight(1f)
                             else Modifier.fillMaxWidth().height(1.dp)
                         )
-                        if (selected != null && webDetail) {
+                        if (loginMode.value) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(loginStatus.value, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedButton(onClick = { browser.reload() }, modifier = Modifier.weight(1f)) {
+                                        Text("刷新登录页")
+                                    }
+                                    Button(onClick = { finishLogin() }, modifier = Modifier.weight(1f)) {
+                                        Text("返回 App")
+                                    }
+                                }
+                            }
+                        } else if (selected != null && webDetail) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 val url = currentUrl.value
@@ -578,6 +626,15 @@ class CatalogActivity : ComponentActivity() {
                                     savedMagnets.value = store.magnets()
                                 }
                                 LazyColumn(contentPadding = PaddingValues(16.dp)) {
+                                    item {
+                                        ListItem(
+                                            headlineContent = { Text("JavDB 账号") },
+                                            supportingContent = { Text("通过官方登录页登录或刷新会话") },
+                                            leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable { openLogin() }
+                                        )
+                                    }
                                     item { Text("磁力库 · " + savedMagnets.value.size, style = MaterialTheme.typography.titleLarge) }
                                     items(savedMagnets.value) { item ->
                                         ListItem(headlineContent = { Text(item.label, maxLines = 2) },
