@@ -11,10 +11,16 @@
   const metadata = selector => clean(document.querySelector(selector)?.getAttribute('content'));
   const title = pick('h2.title', '.video-detail h2', 'h1') || metadata('meta[property="og:title"]') || document.title;
   const description = metadata('meta[name="description"]') || metadata('meta[property="og:description"]');
-  const image = document.querySelector('.video-cover img, .column-video-cover img, .cover img, meta[property="og:image"]');
-  const rawCover = image?.getAttribute('content') || image?.getAttribute('data-src') || image?.getAttribute('src') || '';
+  const image = document.querySelector('img.video-cover, .video-cover img, .column-video-cover img, .cover img, meta[property="og:image"]');
+  const imageCandidates = [image?.getAttribute('content'), image?.getAttribute('data-original'),
+    image?.getAttribute('data-src'), image?.getAttribute('data-lazy-src'),
+    image?.getAttribute('srcset')?.split(',')[0]?.trim().split(/\\s+/)[0],
+    image?.getAttribute('src'), document.querySelector('meta[property="og:image"]')?.getAttribute('content')];
   let cover = '';
-  try { const u = new URL(rawCover, location.href); if (u.protocol === 'https:') cover = u.href; } catch (_) {}
+  for (const raw of imageCandidates) {
+    if (!raw || /^(data:|blob:|javascript:)/i.test(raw)) continue;
+    try { const u = new URL(raw, location.href); if (u.protocol === 'https:') { cover = u.href; break; } } catch (_) {}
+  }
   const panel = document.querySelector('.movie-panel-info, .video-meta-panel, .panel-block');
   const excerpt = clean((panel || document.body).innerText).slice(0, 1400);
   const fields = {};
