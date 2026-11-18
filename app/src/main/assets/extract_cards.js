@@ -15,7 +15,7 @@
   };
   const firstSrcset = raw => (raw || '').split(',').map(s => s.trim().split(/\s+/)[0]).find(Boolean) || '';
   const pickImage = card => {
-    const img = card.querySelector('.cover img, .cover-image img, .cover-image, img');
+    const img = (card.querySelector('.cover img, .cover-image img, img') || card.querySelector('.cover-image'));
     if (!img) return '';
     const candidates = [
       img.getAttribute('data-original'), img.getAttribute('data-src'),
