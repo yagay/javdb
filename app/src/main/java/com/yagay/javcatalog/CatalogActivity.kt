@@ -50,6 +50,11 @@ import org.json.JSONArray
 import java.net.URI
 
 private const val SITE = "https://javdb.com/"
+
+private fun desktopUserAgent(context: android.content.Context): String =
+    WebSettings.getDefaultUserAgent(context)
+        .replace(Regex("\\(Linux; Android[^)]*\\)"), "(Windows NT 10.0; Win64; x64)")
+        .replace(" Mobile Safari/", " Safari/")
 private val light = lightColorScheme(primary = Color(0xFF4A8C2A), background = Color(0xFFFDFDF8))
 private val dark = darkColorScheme(primary = Color(0xFF7CC24A), background = Color(0xFF121410))
 private fun valid(url: String): Boolean = try {
@@ -217,10 +222,7 @@ class CatalogActivity : ComponentActivity() {
             // screen stays native and mobile sized. No separate scraping requests.
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
-            val systemUA = WebSettings.getDefaultUserAgent(this@CatalogActivity)
-            settings.userAgentString = systemUA
-                .replace(Regex("\\(Linux; Android[^)]*\\)"), "(Windows NT 10.0; Win64; x64)")
-                .replace(" Mobile Safari/", " Safari/")
+            settings.userAgentString = desktopUserAgent(this@CatalogActivity)
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             webChromeClient = WebChromeClient()
@@ -289,13 +291,16 @@ class CatalogActivity : ComponentActivity() {
             if (!loginMode.value) {
                 loginReturnUrl.value = browser.url?.takeIf { valid(it) && !it.contains("/login") } ?: SITE
                 loginMode.value = true
-                loginStatus.value = "通过 JavDB 网页完成登录，无须向 App 输入或保存密码。"
+                loginStatus.value = "通过 JavDB 官方网页完成登录；密码和验证码只提交给网站。"
+                // Login uses a touch-friendly mobile webpage. Data extraction returns to desktop mode.
+                browser.settings.userAgentString = WebSettings.getDefaultUserAgent(this)
                 browser.loadUrl(SITE + "login")
             }
         }
         fun finishLogin() {
             CookieManager.getInstance().flush()
             loginMode.value = false
+            browser.settings.userAgentString = desktopUserAgent(this)
             browser.loadUrl(loginReturnUrl.value.takeIf { valid(it) } ?: SITE)
         }
         fun openLegacy(url: String) {
