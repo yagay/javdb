@@ -38,6 +38,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
 import org.json.JSONArray
 import java.net.URI
 
@@ -73,6 +77,8 @@ class CatalogActivity : ComponentActivity() {
         val savedMagnets = mutableStateOf(store.magnets())
         val loading = mutableStateOf(false)
         val currentUrl = mutableStateOf(SITE)
+        val scanInfo = mutableStateOf("")
+        val imageFailures = mutableStateOf(0)
         var generation = 0
         fun decode(value: String): String? = runCatching { JSONArray("[" + value + "]").getString(0) }.getOrNull()
         lateinit var browser: WebView
@@ -107,6 +113,7 @@ class CatalogActivity : ComponentActivity() {
                     decode(value)?.let { raw ->
                         runCatching { MovieListing.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
                             movieList.value = it
+                            scanInfo.value = "已识别 ${it.cards.size} 部影片；${it.cards.count { card -> card.cover.isBlank() }} 部缺少封面地址"
                         }
                     }
                 }
@@ -257,9 +264,11 @@ class CatalogActivity : ComponentActivity() {
                             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 item {
                                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                        AsyncImage(model = info?.cover?.ifBlank { movie.cover } ?: movie.cover,
-                                            contentDescription = movie.title,
-                                            modifier = Modifier.width(128.dp).height(190.dp))
+                                        CoverImage(
+                                            url = info?.cover?.ifBlank { movie.cover } ?: movie.cover,
+                                            referrer = movie.url, userAgent = browser.settings.userAgentString,
+                                            title = movie.title, modifier = Modifier.width(128.dp).height(190.dp),
+                                            onFailure = { imageFailures.value++ })
                                         Column {
                                             Text(info?.title?.ifBlank { movie.title } ?: movie.title,
                                                 style = MaterialTheme.typography.titleLarge)
@@ -345,6 +354,11 @@ class CatalogActivity : ComponentActivity() {
                                     }
                                     Text("当前片单 · " + (movieList.value?.cards?.size ?: 0).toString() + " 部",
                                         style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                                    if (scanInfo.value.isNotBlank()) Text(
+                                        scanInfo.value + if (imageFailures.value > 0) " · 图片加载失败 ${imageFailures.value} 次" else "",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                                     val cards = movieList.value?.cards.orEmpty().filter { valid(it.url) }
                                     if (cards.isEmpty()) Text("网站加载后会显示影片。需要登录或验证时请进入网页浏览。",
                                         modifier = Modifier.padding(16.dp))
@@ -353,7 +367,7 @@ class CatalogActivity : ComponentActivity() {
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                                         verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                         items(cards, key = { it.url }) { movie ->
-                                            PosterCard(movie) { openMovie(movie) }
+                                            PosterCard(movie, browser.settings.userAgentString, onImageFailure = { imageFailures.value++ }) { openMovie(movie) }
                                         }
                                         item {
                                             OutlinedButton(
@@ -541,11 +555,47 @@ class CatalogActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PosterCard(movie: MovieCard, onClick: () -> Unit) {
+private fun CoverImage(url: String, referrer: String, userAgent: String, title: String,
+                       modifier: Modifier = Modifier, onFailure: () -> Unit = {}) {
+    val context = LocalContext.current
+    var failed by remember(url) { mutableStateOf(false) }
+    val request = remember(url, referrer, userAgent) {
+        if (!url.startsWith("https://")) null else ImageRequest.Builder(context)
+            .data(url)
+            .setHeader("Referer", referrer.takeIf { valid(it) } ?: SITE)
+            .setHeader("User-Agent", userAgent)
+            .build()
+    }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {}
+        if (request != null) {
+            AsyncImage(
+                model = request, contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onError = {
+                    failed = true
+                    onFailure()
+                },
+                onSuccess = { failed = false })
+        }
+        if (request == null || failed) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.BrokenImage, contentDescription = "封面暂不可用",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("暂无封面", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PosterCard(movie: MovieCard, userAgent: String, onImageFailure: () -> Unit, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp)) {
-        AsyncImage(model = movie.cover, contentDescription = movie.title,
-            modifier = Modifier.fillMaxWidth().height(208.dp))
+        CoverImage(url = movie.cover, referrer = movie.url, userAgent = userAgent,
+            title = movie.title, modifier = Modifier.fillMaxWidth().height(208.dp),
+            onFailure = onImageFailure)
         Column(Modifier.padding(10.dp)) {
             Text(movie.code.ifBlank { "影片" }, fontWeight = FontWeight.Bold, maxLines = 1)
             Text(movie.title, style = MaterialTheme.typography.bodySmall,
