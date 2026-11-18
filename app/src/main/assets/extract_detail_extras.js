@@ -22,26 +22,28 @@
       el.currentSrc, el.getAttribute('src')];
     return raw.map(image).find(Boolean) || '';
   };
+  // Only link entities inside the film's metadata panel. Never scan the global
+  // nav, recommendations, other film cards, or broad tags from the whole site.
   const sections = [];
-  const seen = new Set();
+  const panel = document.querySelector('.movie-panel-info, .video-meta-panel, .video-detail .movie-panel-info');
   const rules = [
-    ['演员', '.movie-panel-info a[href*="/actors/"], .video-meta-panel a[href*="/actors/"], .panel-block a[href*="/actors/"], a[href*="/actors/"]'],
-    ['导演', '.movie-panel-info a[href*="/directors/"], .panel-block a[href*="/directors/"], a[href*="/directors/"]'],
-    ['制作商', '.movie-panel-info a[href*="/makers/"], a[href*="/makers/"]'],
-    ['发行商', '.movie-panel-info a[href*="/publishers/"], a[href*="/publishers/"]'],
-    ['系列', '.movie-panel-info a[href*="/series/"], a[href*="/series/"]'],
-    ['标签', '.tags a[href], .movie-panel-info a[href*="/tags/"], .video-meta-panel a[href*="/tags/"], a[href*="/tags/"]'],
-    ['番号', '.movie-panel-info a[href*="/video_codes/"], a[href*="/video_codes/"]']
+    ['演员', '/actors/'],
+    ['导演', '/directors/'],
+    ['制作商', '/makers/'],
+    ['发行商', '/publishers/'],
+    ['系列', '/series/'],
+    ['标签', '/tags/']
   ];
-  rules.forEach(([title, selector]) => {
+  if (panel) rules.forEach(([title, path]) => {
     const links = [];
-    document.querySelectorAll(selector).forEach(a => {
+    panel.querySelectorAll('a[href]').forEach(a => {
       const url = href(a.getAttribute('href'));
-      const label = tidy(a.textContent || a.getAttribute('title')).slice(0,80);
-      if (!url || !label || links.some(x => x.url === url)) return;
-      links.push({title: label, url});
+      const label = tidy(a.textContent || a.getAttribute('title')).slice(0,60);
+      if (!url || !new URL(url).pathname.startsWith(path) || !label ||
+          links.some(item => item.url === url)) return;
+      links.push({title:label, url});
     });
-    if (links.length) sections.push({title, links: links.slice(0,40)});
+    if (links.length) sections.push({title, links: links.slice(0,18)});
   });
   // Preview screenshots must be scoped to genuine sample/still image containers.
   // Generic ".tile-images a" also matches unrelated tiles and recommendations.
