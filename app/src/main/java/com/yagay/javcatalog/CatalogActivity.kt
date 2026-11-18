@@ -298,6 +298,15 @@ class CatalogActivity : ComponentActivity() {
                                             OutlinedButton(onClick = { browser.reload() }) { Text("刷新") }
                                             OutlinedButton(onClick = { openLegacy(currentUrl.value) }) { Text("网页浏览") }
                                         }
+                                        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            AssistChip(onClick = { openCategory(SITE + "tags") },
+                                                label = { Text("分类标签") })
+                                            AssistChip(onClick = { openCategory(SITE + "actors") },
+                                                label = { Text("演员") })
+                                            AssistChip(onClick = { openCategory(SITE + "rankings") },
+                                                label = { Text("排行榜") })
+                                        }
                                     }
                                     if (tab == PageTab.HOME && navigation.value?.links?.isNotEmpty() == true) {
                                         Text("网站分类", style = MaterialTheme.typography.titleMedium,
