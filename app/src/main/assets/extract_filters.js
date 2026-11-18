@@ -99,6 +99,46 @@
       }
     });
   });
+  // JavDB's /tags page is built from dt.tag-category groups. Items may be
+  // clickable labels rather than <a>, and selected items expose a delete
+  // button whose onclick URL removes exactly that selection.
+  if (/^\/tags\/?$/.test(new URL(location.href).pathname)) {
+    const tagGroups = [];
+    const current = new URL(location.href);
+    const onclickUrl = node => {
+      const js = node?.getAttribute?.('onclick') || '';
+      const match = js.match(/(?:window\.)?location(?:\.href)?\s*=\s*['"]([^'"]+)['"]/);
+      return match ? allowed(match[1]) : '';
+    };
+    const allGroups = Array.from(document.querySelectorAll('dt.tag-category'));
+    allGroups.forEach(group => {
+      const title = clean(group.querySelector('strong')?.textContent || group.getAttribute('data-cid') || '标签')
+        .replace(/[:：]$/, '');
+      if (title === '收藏' || group.getAttribute('data-cid') === 'custom') return;
+      const options = [], seen = new Set();
+      const addOption = (label, targetUrl, selected) => {
+        label = clean(label);
+        if (!label || !targetUrl) return;
+        const key = label.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        options.push({title:label, url:targetUrl, selected});
+      };
+      // Use the site's own URLs for toggling; do not infer category numbers.
+      group.querySelectorAll('a[href], a[onclick], div.tag, span.tag').forEach(node => {
+        const label = clean(node.textContent || node.getAttribute('title'))
+          .replace(/[×✕✖]\s*$/, '');
+        const deleteButton = node.querySelector('button.delete');
+        const selected = !!deleteButton || node.classList?.contains('is-info');
+        const target = selected
+          ? onclickUrl(deleteButton) || onclickUrl(node)
+          : allowed(node.getAttribute('href')) || onclickUrl(node);
+        if (target) addOption(label, target, selected);
+      });
+      if (options.length) tagGroups.push({title, links:options.slice(0,80)});
+    });
+    if (tagGroups.length) return JSON.stringify({url:location.href, groups:tagGroups.slice(0,30)});
+  }
   const nav = document.querySelector('header, nav, .navbar');
   if (nav) add('网站导航', anchors(nav));
   return JSON.stringify({url:location.href, groups:groups.slice(0,30)});
