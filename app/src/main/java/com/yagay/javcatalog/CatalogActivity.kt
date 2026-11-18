@@ -15,6 +15,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +61,8 @@ class CatalogActivity : ComponentActivity() {
         val cardsJs = assets.open("extract_cards.js").bufferedReader().use { it.readText() }
         val detailsJs = assets.open("extract_details.js").bufferedReader().use { it.readText() }
         val magnetsJs = assets.open("extract_magnets.js").bufferedReader().use { it.readText() }
+        val navJs = assets.open("extract_navigation.js").bufferedReader().use { it.readText() }
+        val navigation = mutableStateOf<SiteNavigation?>(null)
         val movieList = mutableStateOf<MovieListing?>(null)
         val details = mutableStateOf<MovieDetails?>(null)
         val magnetList = mutableStateOf<List<Magnet>>(emptyList())
@@ -74,6 +80,15 @@ class CatalogActivity : ComponentActivity() {
             val request = generation
             store.history(url, browser.title ?: url)
             visits.value = store.pages("history")
+            browser.evaluateJavascript(navJs) { value ->
+                if (request == generation && browser.url == url) {
+                    decode(value)?.let { raw ->
+                        runCatching { SiteNavigation.parse(raw) }.getOrNull()?.takeIf { it.url == url }?.let {
+                            navigation.value = it.copy(links = it.links.filter { link -> valid(link.url) })
+                        }
+                    }
+                }
+            }
             browser.evaluateJavascript(cardsJs) { value ->
                 if (request == generation && browser.url == url) {
                     decode(value)?.let { raw ->
@@ -148,6 +163,16 @@ class CatalogActivity : ComponentActivity() {
                 var search by remember { mutableStateOf("") }
                 var selected by remember { mutableStateOf<MovieCard?>(null) }
                 var showMagnets by remember { mutableStateOf(false) }
+                var filterText by remember { mutableStateOf("") }
+                var subtitlesOnly by remember { mutableStateOf(false) }
+                var minSize by remember { mutableStateOf("") }
+                var maxSize by remember { mutableStateOf("") }
+                var unknownSize by remember { mutableStateOf(true) }
+                val selectedHashes = remember { mutableStateListOf<String>() }
+                fun copyItems(items: List<Magnet>) {
+                    if (items.isNotEmpty()) getSystemService(ClipboardManager::class.java)
+                        .setPrimaryClip(ClipData.newPlainText("Magnets", items.joinToString("\n") { it.uri }))
+                }
                 fun openMovie(card: MovieCard) {
                     if (!valid(card.url)) return
                     selected = card
@@ -250,6 +275,18 @@ class CatalogActivity : ComponentActivity() {
                                             OutlinedButton(onClick = { openLegacy(currentUrl.value) }) { Text("网页浏览") }
                                         }
                                     }
+                                    if (tab == PageTab.HOME && navigation.value?.links?.isNotEmpty() == true) {
+                                        Text("网站分类", style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                                .padding(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            navigation.value?.links?.take(16)?.forEach { link ->
+                                                AssistChip(onClick = { openSite(link.url); tab = PageTab.LIST },
+                                                    label = { Text(link.title, maxLines = 1) })
+                                            }
+                                        }
+                                    }
                                     Text("当前片单 · " + (movieList.value?.cards?.size ?: 0).toString() + " 部",
                                         style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
                                     val cards = movieList.value?.cards.orEmpty().filter { valid(it.url) }
@@ -321,29 +358,87 @@ class CatalogActivity : ComponentActivity() {
                     }
                 }
                 if (showMagnets) {
+                    val origin = selected?.url
+                    val all = magnetList.value.filter { origin != null && it.pageUrl == origin }
+                    val filtered = MagnetTools.filter(all, filterText, subtitlesOnly,
+                        minSize.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                        maxSize.toIntOrNull()?.coerceAtLeast(0) ?: 0, unknownSize)
+                    val chosen = filtered.filter { MagnetTools.hash(it.uri) in selectedHashes }
                     ModalBottomSheet(onDismissRequest = { showMagnets = false }) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("磁力链接 · " + magnetList.value.size, style = MaterialTheme.typography.titleLarge)
-                            if (magnetList.value.isEmpty()) Text("当前页面没有发现磁力链接，请尝试网页详情。")
-                            magnetList.value.take(60).forEach { magnet ->
-                                ListItem(
-                                    headlineContent = { Text(magnet.label, maxLines = 2) },
-                                    supportingContent = { Text(magnet.size) },
-                                    trailingContent = {
-                                        TextButton(onClick = {
-                                            store.saveMagnet(magnet)
-                                            savedMagnets.value = store.magnets()
-                                            getSystemService(ClipboardManager::class.java)
-                                                .setPrimaryClip(ClipData.newPlainText("Magnet", magnet.uri))
-                                        }) { Text("复制保存") }
-                                    }
-                                )
+                        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("磁力资源 · ${filtered.size}/${all.size}",
+                                style = MaterialTheme.typography.titleLarge)
+                            OutlinedTextField(filterText, { filterText = it }, singleLine = true,
+                                label = { Text("名称 / 字幕关键词") }, modifier = Modifier.fillMaxWidth())
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(minSize, { minSize = it.filter(Char::isDigit).take(8) },
+                                    singleLine = true, label = { Text("最小 MB") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f))
+                                OutlinedTextField(maxSize, { maxSize = it.filter(Char::isDigit).take(8) },
+                                    singleLine = true, label = { Text("最大 MB (0无限制)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f))
+                            }
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Checkbox(subtitlesOnly, { subtitlesOnly = it })
+                                Text("仅字幕")
+                                Checkbox(unknownSize, { unknownSize = it })
+                                Text("未知大小")
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = {
+                                    filterText = ""; subtitlesOnly = false; minSize = "";
+                                    maxSize = ""; unknownSize = true; selectedHashes.clear()
+                                }) { Text("重置") }
+                                TextButton(onClick = {
+                                    selectedHashes.clear()
+                                    selectedHashes.addAll(filtered.mapNotNull { MagnetTools.hash(it.uri) })
+                                }) { Text("全选") }
+                                TextButton(onClick = { selectedHashes.clear() }) { Text("清空") }
+                                Text("已选 ${chosen.size}", modifier = Modifier.padding(top = 12.dp))
+                            }
+                            if (filtered.isEmpty()) Text("没有符合条件的磁力，可以调整筛选或打开网页。")
+                            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items(filtered, key = { MagnetTools.hash(it.uri) ?: it.uri }) { magnet ->
+                                    val hash = MagnetTools.hash(magnet.uri) ?: magnet.uri
+                                    ListItem(
+                                        headlineContent = { Text(magnet.label, maxLines = 2) },
+                                        supportingContent = { Text(magnet.size) },
+                                        leadingContent = {
+                                            Checkbox(selectedHashes.contains(hash), { enabled ->
+                                                if (enabled && hash !in selectedHashes) selectedHashes.add(hash)
+                                                if (!enabled) selectedHashes.remove(hash)
+                                            })
+                                        },
+                                        trailingContent = {
+                                            IconButton(onClick = { copyItems(listOf(magnet)) }) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = "复制")
+                                            }
+                                        },
+                                        modifier = Modifier.clickable {
+                                            if (hash in selectedHashes) selectedHashes.remove(hash)
+                                            else selectedHashes.add(hash)
+                                        }
+                                    )
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { copyItems(chosen) }, enabled = chosen.isNotEmpty(),
+                                    modifier = Modifier.weight(1f)) { Text("复制选中") }
+                                Button(onClick = {
+                                    chosen.forEach(store::saveMagnet)
+                                    savedMagnets.value = store.magnets()
+                                }, enabled = chosen.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                                    Text("保存选中")
+                                }
                             }
                             TextButton(onClick = {
-                                openLegacy(currentUrl.value)
+                                openLegacy(origin ?: currentUrl.value)
                                 showMagnets = false
-                            }) { Text("高级筛选 / 批量操作") }
-                            Spacer(Modifier.height(16.dp))
+                            }) { Text("网页完整功能") }
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
                 }
