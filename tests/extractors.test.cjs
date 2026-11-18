@@ -116,3 +116,36 @@ assert.equal(directory.items.length,1);
 assert.equal(directory.items[0].url,'https://javdb.com/actors/xyz');
 assert.equal(directory.items[0].cover,'https://c0.jdbstatic.com/actors/avatar.jpg');
 console.log('PASS: native entity directory source extraction');
+
+
+// Verify desktop GET dropdown preserves existing active query filters.
+const formSelect = {
+ name: 'sort',
+ disabled: false,
+ tagName: 'SELECT',
+ options: [
+   {value:'recent',textContent:'最近',selected:false},
+   {value:'rating',textContent:'评分',selected:true}
+ ],
+ getAttribute: key => key === 'aria-label' ? '排序' : null,
+ closest:()=>null
+};
+const form = {
+ getAttribute: key => ({method:'get',action:'/tags'})[key] || null,
+ querySelectorAll:()=>[formSelect]
+};
+const filtersDoc = {
+ querySelectorAll: selector => {
+   if (selector==='form') return [form];
+   return [];
+ },
+ querySelector:()=>null
+};
+const filters=run('extract_filters.js',filtersDoc,'https://javdb.com/tags?c2=5&sort=recent');
+const sortGroup=filters.groups.find(g=>g.title==='排序');
+assert.ok(sortGroup,'desktop GET dropdown should appear as native sort options');
+assert.equal(sortGroup.links.length,2);
+assert.ok(sortGroup.links[1].selected);
+assert.ok(sortGroup.links[1].url.includes('c2=5'),'existing filters must be preserved');
+assert.ok(sortGroup.links[1].url.includes('sort=rating'),'selected sort must be encoded');
+console.log('PASS: desktop form sorting and existing-filter preservation');
