@@ -88,6 +88,12 @@ internal fun MobilePortal(
                 Spacer(Modifier.width(5.dp))
                 Text("筛选与排序")
             }
+            if (isTagsPage) {
+                // The site's default tag category is Censored. Never derive this
+                // destination from unrelated navbar/actor links.
+                AssistChip(onClick = { onOpen("https://javdb.com/tags") },
+                    label = { Text("Censored") })
+            }
             if (url != "https://javdb.com/tags" && !rankingMode) {
                 TextButton(onClick = { onOpen("https://javdb.com/tags") }) { Text("全部标签") }
             }
