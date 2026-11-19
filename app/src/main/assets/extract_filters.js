@@ -9,6 +9,17 @@
   };
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 60);
   const groups = [], signatures = new Set();
+  const currentPath = new URL(location.href).pathname;
+  const isTagPage = /^\/tags\/?$/.test(currentPath);
+  const isEntityPath = path => /^\/(?:actors|directors|makers|publishers|series|video_codes)(?:\/|$)/.test(path);
+  const isFilterTarget = raw => {
+    const url = allowed(raw);
+    if (!url) return false;
+    const dest = new URL(url);
+    // A tag or category control must never navigate to an actor or maker.
+    if (isEntityPath(dest.pathname) || /\/(?:login|sign_in|logout)(?:\/|$)/.test(dest.pathname)) return false;
+    return !isTagPage || /^\/tags\/?$/.test(dest.pathname);
+  };
   const active = node => !!(
     node.classList?.contains('active') ||
     node.classList?.contains('is-active') ||
@@ -22,7 +33,7 @@
     list.forEach(item => {
       const url = allowed(item.url);
       const name = clean(item.title);
-      if (!url || !name || seen.has(url)) return;
+      if (!url || !name || seen.has(url) || !isFilterTarget(url)) return;
       seen.add(url);
       links.push({title:name, url, selected:!!item.selected});
     });
@@ -38,15 +49,13 @@
   }));
   const containers = [
     '.filter-panel', '.filter-group', '.filter-section', '.filters', '.filter',
-    '.tag-list', '.tags', '.category-list', '.categories', '.tabs',
-    '.pagination', '.sort-options', '.sort', '.ranking-tabs',
+    '.tag-list', '.sort-options', '.sort', '.ranking-tabs',
     '.movie-list-filter', '.movie-filter', '.filter-buttons', '.sort-list',
     '.movie-list-header', '.filter-box', '.filter-options',
-    '.buttons.has-addons', '.dropdown-menu', '.dropdown-content', '.tabs.is-toggle',
-    '.level-left', '.level-right'
+    '.buttons.has-addons', '.dropdown-content', '.tabs.is-toggle'
   ].join(',');
   document.querySelectorAll(containers).forEach(el => {
-    if (el.closest('.movie-list .item, .movie-box, .video-item, footer')) return;
+    if (el.closest('.movie-list .item, .movie-box, .video-item, header, nav, .navbar, footer')) return;
     const header = el.querySelector('h2, h3, h4, .title, .label, strong')?.textContent ||
       el.getAttribute('aria-label') || el.className?.toString().split(' ')[0];
     add(header, anchors(el));
@@ -137,9 +146,10 @@
       });
       if (options.length) tagGroups.push({title, links:options.slice(0,80)});
     });
-    if (tagGroups.length) return JSON.stringify({url:location.href, groups:tagGroups.slice(0,30)});
+    // On /tags, never fall back to generic site navigation: generic links may
+    // point to /actors despite being presented alongside Censored filters.
+    return JSON.stringify({url:location.href, groups:tagGroups.slice(0,30)});
   }
-  const nav = document.querySelector('header, nav, .navbar');
-  if (nav) add('网站导航', anchors(nav));
+  // Site navigation belongs to extract_navigation.js, not filter controls.
   return JSON.stringify({url:location.href, groups:groups.slice(0,30)});
 })();
