@@ -281,3 +281,33 @@ assert.equal(actualTags.groups[0].links[0].url,'https://javdb.com/tags?c2=5&c10=
 assert.equal(actualTags.groups[0].links[1].selected,false);
 assert.equal(actualTags.groups[0].links[1].url,'https://javdb.com/tags?c2=5,6&c10=1');
 console.log('PASS: real tag-category DOM, selected-tag removal, other filters retained');
+
+
+// Regression: a global navigation anchor targeting /actors must not appear as
+// Censored filter, and a tag option must remain on /tags.
+const badLink={
+ textContent:'Censored',
+ getAttribute:key=>key==='href'?'/actors':null
+};
+const goodLink={
+ textContent:'Censored',
+ getAttribute:key=>key==='href'?'/tags?c10=1':null
+};
+const navTagNode={
+ querySelector:()=>({textContent:'分类'}),
+ getAttribute:()=>null,
+ className:'tabs',
+ closest:()=>null,
+ querySelectorAll:()=>[badLink,goodLink]
+};
+const fallbackTagDocument={
+ querySelector:()=>null,
+ querySelectorAll:selector=>selector==='dt.tag-category'?[]:
+    selector.includes('.filter-panel')?[navTagNode]:[]
+};
+const strictTagFilters=run('extract_filters.js',fallbackTagDocument,'https://javdb.com/tags');
+assert.equal(strictTagFilters.groups.length,0,'Tag page must not fall back to navigation tabs');
+const ordinaryFilters=run('extract_filters.js',fallbackTagDocument,'https://javdb.com/');
+assert.ok(ordinaryFilters.groups.flatMap(g=>g.links).every(link=>!link.url.endsWith('/actors')),
+  'Actor route must never be exposed as a category filter');
+console.log('PASS: Censored cannot accidentally navigate to actors via filter bar');
