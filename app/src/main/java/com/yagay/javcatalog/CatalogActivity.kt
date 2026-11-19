@@ -554,6 +554,13 @@ class CatalogActivity : ComponentActivity() {
                                                 showDirectory = false
                                                 openSite(SITE)
                                             }, label = { Text("最新") })
+                                            AssistChip(onClick = {
+                                                // The default homepage feed is Censored;
+                                                // do not follow a mislabeled /actors link.
+                                                tab = PageTab.HOME
+                                                showDirectory = false
+                                                openSite(SITE)
+                                            }, label = { Text("Censored") })
                                             AssistChip(onClick = { openCategory(SITE + "tags") }, label = { Text("分类") })
                                             AssistChip(onClick = { openCategory(SITE + "actors") }, label = { Text("演员") })
                                             AssistChip(onClick = { openCategory(SITE + "rankings") }, label = { Text("排行") })
