@@ -8,7 +8,8 @@
     } catch (_) { return ''; }
   };
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 60);
-  const groups = [], signatures = new Set();
+  const groups = [], formGroups = [], signatures = new Set();
+  let inForm = false;
   const currentPath = new URL(location.href).pathname;
   const isTagPage = /^\/tags\/?$/.test(currentPath);
   const isEntityPath = path => /^\/(?:actors|directors|makers|publishers|series|video_codes)(?:\/|$)/.test(path);
@@ -41,7 +42,9 @@
     const signature = links.slice(0,5).map(item => item.url).join('|');
     if (signatures.has(signature)) return;
     signatures.add(signature);
-    groups.push({title:clean(title) || '筛选', links:links.slice(0,80)});
+    const group = {title:clean(title) || '筛选', links:links.slice(0,80)};
+    groups.push(group);
+    if (inForm) formGroups.push(group);
   };
   const anchors = root => Array.from(root.querySelectorAll('a[href]')).map(a => ({
     title: a.textContent || a.title || a.getAttribute('aria-label'),
@@ -62,6 +65,7 @@
   });
   // Desktop JavDB filters may be GET forms with <select>/<option> or radio inputs.
   // Derive URLs from the form's actual action and field names; never guess an API.
+  inForm = true;
   document.querySelectorAll('form').forEach(form => {
     const method = String(form.getAttribute('method') || 'get').toLowerCase();
     if (method !== 'get') return;
@@ -108,6 +112,7 @@
       }
     });
   });
+  inForm = false;
   // JavDB's /tags page is built from dt.tag-category groups. Items may be
   // clickable labels rather than <a>, and selected items expose a delete
   // button whose onclick URL removes exactly that selection.
@@ -148,7 +153,8 @@
     });
     // On /tags, never fall back to generic site navigation: generic links may
     // point to /actors despite being presented alongside Censored filters.
-    return JSON.stringify({url:location.href, groups:tagGroups.slice(0,30)});
+    return JSON.stringify({url:location.href,
+      groups:tagGroups.concat(formGroups).slice(0,30)});
   }
   // Site navigation belongs to extract_navigation.js, not filter controls.
   return JSON.stringify({url:location.href, groups:groups.slice(0,30)});
