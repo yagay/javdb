@@ -132,7 +132,7 @@
       const options = [], seen = new Set();
       const addOption = (label, targetUrl, selected) => {
         label = clean(label);
-        if (!label || !targetUrl) return;
+        if (!label || !targetUrl || !isFilterTarget(targetUrl)) return;
         const key = label.toLowerCase();
         if (seen.has(key)) return;
         seen.add(key);
