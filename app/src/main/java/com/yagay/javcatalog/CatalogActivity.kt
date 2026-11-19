@@ -332,6 +332,18 @@ class CatalogActivity : ComponentActivity() {
                     showDirectory = route == "/tags" && Uri.parse(url).query.isNullOrEmpty()
                     openSite(url)
                 }
+                fun openFilter(url: String) {
+                    if (!valid(url)) return
+                    val target = Uri.parse(url)
+                    val source = Uri.parse(currentUrl.value)
+                    // Filter chips on the tag page must stay within /tags.
+                    if (source.path?.trimEnd('/') == "/tags" &&
+                        target.path?.trimEnd('/') != "/tags") return
+                    if (target.path?.startsWith("/actors") == true ||
+                        target.path?.startsWith("/makers") == true ||
+                        target.path?.startsWith("/directors") == true) return
+                    openCategory(url)
+                }
                 fun openMovie(card: MovieCard) {
                     if (!valid(card.url)) return
                     selected = card
@@ -523,7 +535,12 @@ class CatalogActivity : ComponentActivity() {
                                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
                                             item {
                                                 MobilePortal(currentUrl.value, navigation.value, siteFilters.value,
-                                                    rankingMode = false, onOpen = { openCategory(it) },
+                                                    rankingMode = false, onOpen = { link ->
+                                                        val isTags = Uri.parse(currentUrl.value).path?.trimEnd('/') == "/tags"
+                                                        if (isTags && Uri.parse(link).path?.trimEnd('/') == "/tags")
+                                                            openFilter(link)
+                                                        else if (!isTags) openCategory(link)
+                                                    },
                                                     onFilters = { showFilters = true })
                                             }
                                         }
@@ -532,7 +549,11 @@ class CatalogActivity : ComponentActivity() {
                                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                                                 .padding(horizontal = 8.dp, vertical = 2.dp),
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            AssistChip(onClick = { openSite(SITE) }, label = { Text("最新") })
+                                            AssistChip(onClick = {
+                                                tab = PageTab.HOME
+                                                showDirectory = false
+                                                openSite(SITE)
+                                            }, label = { Text("最新") })
                                             AssistChip(onClick = { openCategory(SITE + "tags") }, label = { Text("分类") })
                                             AssistChip(onClick = { openCategory(SITE + "actors") }, label = { Text("演员") })
                                             AssistChip(onClick = { openCategory(SITE + "rankings") }, label = { Text("排行") })
@@ -544,9 +565,21 @@ class CatalogActivity : ComponentActivity() {
                                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                                                 .padding(horizontal = 8.dp),
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            navigation.value?.links?.take(16)?.forEach { link ->
-                                                AssistChip(onClick = { openCategory(link.url) },
-                                                    label = { Text(link.title, maxLines = 1) })
+                                            navigation.value?.links?.filterNot { link ->
+                                                val title = link.title.trim().lowercase()
+                                                val path = Uri.parse(link.url).path.orEmpty()
+                                                title in setOf("censored", "uncensored", "western",
+                                                    "有码", "有碼", "无码", "無碼", "欧美", "歐美") &&
+                                                    path.startsWith("/actors")
+                                            }?.take(12)?.forEach { link ->
+                                                AssistChip(onClick = {
+                                                    val label = link.title.trim().lowercase()
+                                                    if (label in setOf("最新", "latest", "newest")) {
+                                                        tab = PageTab.HOME
+                                                        showDirectory = false
+                                                        openSite(SITE)
+                                                    } else openCategory(link.url)
+                                                }, label = { Text(link.title, maxLines = 1) })
                                             }
                                         }
                                     }
@@ -565,7 +598,7 @@ class CatalogActivity : ComponentActivity() {
                                                 .distinctBy { it.url }
                                                 .take(8).forEach { item ->
                                                     FilterChip(selected = true,
-                                                        onClick = { openCategory(item.url) },
+                                                        onClick = { openFilter(item.url) },
                                                         label = { Text(item.title, maxLines = 1) })
                                                 }
                                             if (Uri.parse(currentUrl.value).path == "/tags" &&
@@ -700,7 +733,7 @@ class CatalogActivity : ComponentActivity() {
                                             group.links.forEach { option ->
                                                 FilterChip(
                                                     selected = option.selected,
-                                                    onClick = { openCategory(option.url) },
+                                                    onClick = { openFilter(option.url) },
                                                     label = { Text(option.title, maxLines = 1) })
                                             }
                                         }
