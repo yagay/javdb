@@ -311,3 +311,25 @@ const ordinaryFilters=run('extract_filters.js',fallbackTagDocument,'https://javd
 assert.ok(ordinaryFilters.groups.flatMap(g=>g.links).every(link=>!link.url.endsWith('/actors')),
   'Actor route must never be exposed as a category filter');
 console.log('PASS: Censored cannot accidentally navigate to actors via filter bar');
+
+
+// Even a broken/mis-associated entry inside dt.tag-category must never send
+// a Censored tag action to /actors.
+const badCategoryNode={
+ textContent:'Censored',
+ classList:{contains:()=>false},
+ querySelector:()=>null,
+ getAttribute:k=>k==='href'?'/actors':null,
+};
+const badCategoryGroup={
+ getAttribute:k=>k==='data-cid'?'10':null,
+ querySelector:sel=>sel==='strong'?{textContent:'类别'}:null,
+ querySelectorAll:()=>[badCategoryNode]
+};
+const badCategoryDoc={
+ querySelectorAll:sel=>sel==='dt.tag-category'?[badCategoryGroup]:[],
+ querySelector:()=>null,
+};
+const blockedCensored=run('extract_filters.js',badCategoryDoc,'https://javdb.com/tags');
+assert.equal(blockedCensored.groups.length,0);
+console.log('PASS: invalid Censored actor destination blocked inside tag-category');
