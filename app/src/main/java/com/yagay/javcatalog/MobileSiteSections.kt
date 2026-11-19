@@ -121,7 +121,7 @@ internal fun MobilePortal(
                 }
             }
         }
-        if (!isTagsPage) navigation?.links?.filterNot { link ->
+        if (!isTagsPage) navigation?.links?.filter(::isSiteSectionLink)?.filterNot { link ->
             mobileSiteEntries.any { it.url.trimEnd('/') == link.url.substringBefore('?').trimEnd('/') }
         }?.take(18)?.takeIf { it.isNotEmpty() }?.let { links ->
             Text("更多网页栏目", style = MaterialTheme.typography.titleSmall,
@@ -162,7 +162,7 @@ internal fun NativeSiteMenu(
                         trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                         modifier = Modifier.clickable { onOpen(entry.url) })
                 }
-                val dynamic = navigation?.links.orEmpty().filterNot { link ->
+                val dynamic = navigation?.links.orEmpty().filter(::isSiteSectionLink).filterNot { link ->
                     mobileSiteEntries.any { it.url.trimEnd('/') == link.url.substringBefore('?').trimEnd('/') }
                 }.distinctBy { it.url }
                 if (dynamic.isNotEmpty()) {
