@@ -333,3 +333,23 @@ const badCategoryDoc={
 const blockedCensored=run('extract_filters.js',badCategoryDoc,'https://javdb.com/tags');
 assert.equal(blockedCensored.groups.length,0);
 console.log('PASS: invalid Censored actor destination blocked inside tag-category');
+
+
+// Main navigation must exclude content categories and misleading /actors routes.
+// Actor itself remains a valid site-section link.
+const menuAnchors = [
+ {textContent:'Censored',getAttribute:k=>k==='href'?'/actors':null},
+ {textContent:'Censored',getAttribute:k=>k==='href'?'/tags?c10=1':null},
+ {textContent:'演员',getAttribute:k=>k==='href'?'/actors':null},
+ {textContent:'排行榜',getAttribute:k=>k==='href'?'/rankings':null},
+];
+const navDoc = {
+ querySelectorAll: selector=> selector.startsWith('header a[href]')?menuAnchors:[]
+};
+const navParsed=run('extract_navigation.js',navDoc,'https://javdb.com/');
+assert.equal(navParsed.links.length,2);
+assert.equal(navParsed.links[0].title,'演员');
+assert.equal(navParsed.links[0].url,'https://javdb.com/actors');
+assert.equal(navParsed.links[1].title,'排行榜');
+assert.equal(navParsed.links.some(l=>l.title==='Censored'),false);
+console.log('PASS: site sections exclude Censored category and retain actors correctly');
